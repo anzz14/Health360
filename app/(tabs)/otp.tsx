@@ -1,13 +1,13 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
-    KeyboardAvoidingView,
-    NativeSyntheticEvent,
-    Platform,
-    Text,
-    TextInput,
-    TextInputKeyPressEventData,
-    TouchableOpacity,
-    View,
+  KeyboardAvoidingView,
+  NativeSyntheticEvent,
+  Platform,
+  Text,
+  TextInput,
+  TextInputKeyPressEventData,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { Path, Svg } from "react-native-svg";
 
@@ -192,7 +192,7 @@ export default function OtpScreen() {
                         }),
                       }}
                     >
-                      <TextInput
+                      {/* <TextInput
                         ref={(ref) => (inputRefs.current[index] = ref)}
                         value={digit}
                         onChangeText={(text) => handleChange(text, index)}
@@ -211,7 +211,7 @@ export default function OtpScreen() {
                           color: "#081B3A",
                           padding: 0,
                         }}
-                      />
+                      /> */}
                     </View>
                   );
                 })}
