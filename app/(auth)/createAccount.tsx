@@ -3,7 +3,7 @@ import { Button } from "@/components/button/button";
 import { Input } from "@/components/inputs/input";
 import { Typography } from "@/components/typography/typography";
 import { Link, router } from "expo-router";
-import { ArrowLeft, User } from "lucide-react-native";
+import { ArrowLeft, Eye, EyeOff, Lock, User } from "lucide-react-native";
 import React, { useState } from "react";
 
 import {
@@ -25,11 +25,14 @@ export default function CreateAccountScreen({
   const [formData, setFormData] = useState({
     name: "",
     phone: "",
+    password: "",
   });
 
   const [agreed, setAgreed] = useState(false);
   const [nameFocused, setNameFocused] = useState(false);
   const [phoneFocused, setPhoneFocused] = useState(false);
+  const [passwordFocused, setPasswordFocused] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const PRIMARY = "#008080";
   const HEADING = "#1A2B4B";
@@ -83,13 +86,13 @@ export default function CreateAccountScreen({
                   variant="body"
                   color="heading"
                 >
-                  Full Name
+                  Email
                 </Typography>
 
                 <Input
                   prefix={<User />}
-                  placeholder="Anzz Sharma"
-                  keyboardType="phone-pad"
+                  placeholder="AnzzSharma@gmail.com"
+                  keyboardType="default"
                   value={formData.name}
                   onChangeText={(text) =>
                     setFormData({ ...formData, name: text })
@@ -100,7 +103,53 @@ export default function CreateAccountScreen({
               </View>
 
               {/* Phone Number Field */}
+             
+              {/* Password Field */}
               <View>
+                <Typography
+                  className="mb-2 ml-0.5"
+                  variant="body"
+                  color="heading"
+                >
+                  Password
+                </Typography>
+                <View
+                  className="h-14 rounded-2xl bg-white flex-row items-center overflow-hidden"
+                  style={{
+                    borderWidth: 1,
+                    borderColor: passwordFocused ? PRIMARY : BORDER,
+                  }}
+                >
+                  <Input
+                    prefix={<Lock size={18} color={GRAY} />}
+                    placeholder="Enter your password"
+                    secureTextEntry={!showPassword}
+                    value={formData.password}
+                    onChangeText={(text) =>
+                      setFormData({ ...formData, password: text })
+                    }
+                    onFocus={() => setPasswordFocused(true)}
+                    onBlur={() => setPasswordFocused(false)}
+                    maxLength={64}
+                    required
+                    suffix={
+                      <TouchableOpacity
+                        onPress={() => setShowPassword(!showPassword)}
+                        activeOpacity={0.7}
+                        className="pr-4"
+                      >
+                        {showPassword ? (
+                          <EyeOff size={18} color={GRAY} />
+                        ) : (
+                          <Eye size={18} color={GRAY} />
+                        )}
+                      </TouchableOpacity>
+                    }
+                  />
+                </View>
+              </View>
+
+               <View>
                 <Typography
                   className="mb-2 ml-0.5"
                   variant="body"
@@ -153,34 +202,22 @@ export default function CreateAccountScreen({
                   )}
                 </View>
                 <View className="flex-row flex-wrap items-center">
-  <Typography
-    className="opacity-70"
-    variant="body"
-    color="default"
-  >
-    I agree to the{" "}
-  </Typography>
-
-  <Typography variant="body" color="primary">
-    Terms of Service{" "}
-  </Typography>
-
-  <Typography
-    className="opacity-70"
-    variant="body"
-    color="default"
-  >
-    and{" "}
-  </Typography>
-
-  <Typography variant="body" color="primary">
-    Privacy Policy
-  </Typography>
-</View>
+                  <Typography className="opacity-70" variant="body" color="default">
+                    I agree to the{" "}
+                  </Typography>
+                  <Typography variant="body" color="primary">
+                    Terms of Service{" "}
+                  </Typography>
+                  <Typography className="opacity-70" variant="body" color="default">
+                    and{" "}
+                  </Typography>
+                  <Typography variant="body" color="primary">
+                    Privacy Policy
+                  </Typography>
+                </View>
               </TouchableOpacity>
             </View>
 
-          
             <Button
               title="Send OTP"
               onPress={sendOTP}
@@ -192,24 +229,14 @@ export default function CreateAccountScreen({
 
             {/* Divider */}
             <View className="flex-row items-center gap-3 my-7">
-              <View
-                className="flex-1 h-px"
-                style={{ backgroundColor: BORDER }}
-              />
+              <View className="flex-1 h-px" style={{ backgroundColor: BORDER }} />
               <Text
                 className="font-bold tracking-wider"
-                style={{
-                  fontSize: 13,
-                  color: GRAY,
-                  letterSpacing: 1.5,
-                }}
+                style={{ fontSize: 13, color: GRAY, letterSpacing: 1.5 }}
               >
                 — OR —
               </Text>
-              <View
-                className="flex-1 h-px"
-                style={{ backgroundColor: BORDER }}
-              />
+              <View className="flex-1 h-px" style={{ backgroundColor: BORDER }} />
             </View>
 
             {/* Google Button */}
@@ -226,21 +253,12 @@ export default function CreateAccountScreen({
             {/* Footer */}
             <View className="flex-1 justify-end pb-8 pt-8">
               <View className="flex-row justify-center items-center gap-1">
-                <Text
-                  className="text-sm"
-                  style={{
-                    color: GRAY,
-                    fontFamily: "Inter_400Regular",
-                  }}
-                >
+                <Text className="text-sm" style={{ color: GRAY, fontFamily: "Inter_400Regular" }}>
                   Already have an account?
                 </Text>
                 <TouchableOpacity onPress={onLogin} activeOpacity={0.7}>
                   <Link href="/login">
-                    <Text
-                      className="font-bold text-sm"
-                      style={{ color: PRIMARY }}
-                    >
+                    <Text className="font-bold text-sm" style={{ color: PRIMARY }}>
                       Log In
                     </Text>
                   </Link>
