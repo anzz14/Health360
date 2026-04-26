@@ -1,16 +1,21 @@
 import { Tabs } from "expo-router";
-import React from "react";
 
 import { HapticTab } from "@/components/haptic-tab";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { User, UserPlus } from "lucide-react-native";
+import {
+    BriefcaseMedical,
+    ClipboardList,
+    House,
+    Users,
+} from "lucide-react-native";
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
 
   return (
     <Tabs
+      initialRouteName="familyCareDashboard"
       screenOptions={{
         tabBarActiveTintColor: Colors[colorScheme ?? "light"].tint,
         headerShown: false,
@@ -18,29 +23,38 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen
-        name="login"
+        name="familyCareDashboard"
         options={{
-          title: "Login",
+          title: "Dashboard",
           tabBarIcon: ({ color }) => {
-            return <User size={28} color={color} />;
+            return <House size={28} color={color} />;
           },
         }}
       />
       <Tabs.Screen
-        name="createAccount"
+        name="familyInfo"
         options={{
-          title: "CreateAccount",
+          title: "Family",
           tabBarIcon: ({ color }) => {
-            return <UserPlus size={28} color={color} />;
+            return <Users size={28} color={color} />;
           },
         }}
       />
-       <Tabs.Screen
-        name="otp"
+      <Tabs.Screen
+        name="manageFamily"
         options={{
-          title: "otp",
+          title: "Manage",
           tabBarIcon: ({ color }) => {
-            return <UserPlus size={28} color={color} />;
+            return <ClipboardList size={28} color={color} />;
+          },
+        }}
+      />
+      <Tabs.Screen
+        name="userDetail"
+        options={{
+          title: "Profile",
+          tabBarIcon: ({ color }) => {
+            return <BriefcaseMedical size={28} color={color} />;
           },
         }}
       />
