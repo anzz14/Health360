@@ -148,7 +148,7 @@ export default function LoginScreen() {
               </View>
             </>
           </ScrollView>
-          <Link href={"/(tabs)/otp"}>temp btn</Link>
+          <Link href={"/otp"}>temp btn</Link>
         </KeyboardAvoidingView>
       </SafeAreaView>
     </>

@@ -12,6 +12,10 @@ export default function AuthLayout() {
           name="createAccount"
           options={{ headerShown: false,  animation: "none" }}
         />
+         <Stack.Screen
+          name="otp"
+          options={{ headerShown: false,  animation: "none" }}
+        />
       </Stack>
     </>
   );

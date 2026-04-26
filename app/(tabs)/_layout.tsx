@@ -35,6 +35,15 @@ export default function TabLayout() {
           },
         }}
       />
+       <Tabs.Screen
+        name="otp"
+        options={{
+          title: "otp",
+          tabBarIcon: ({ color }) => {
+            return <UserPlus size={28} color={color} />;
+          },
+        }}
+      />
     </Tabs>
   );
 }

@@ -1,48 +1,43 @@
 import {
   ArrowLeft,
-  Calendar,
+  BriefcaseMedical,
+  CalendarDays,
   ChevronRight,
   FileText,
-  FolderOpen,
+  Folder,
   Home,
   Plus,
   ShoppingCart,
-  Stethoscope,
   User,
 } from "lucide-react-native";
-import React from "react";
+import React, { useState } from "react";
 import {
+  Image,
+  Platform,
   SafeAreaView,
   ScrollView,
-  Text,
+  StatusBar,
   TouchableOpacity,
   View,
 } from "react-native";
+import { Typography } from "@/components/typography/typography";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-type BloodGroup = "O+" | "O-" | "A+" | "A-" | "B+" | "B-" | "AB+" | "AB-";
-
 type FamilyMember = {
   id: string;
   name: string;
   relation: string;
   age: number;
-  bloodGroup: BloodGroup;
+  bloodGroup: string;
   lastConsult: string;
   records: number;
-  initials: string;
+  avatar: string;
+  bloodColor: string;
+  bloodBg: string;
 };
 
-type NavItem = {
-  key: string;
-  label: string;
-  active: boolean;
-};
-
-// ─── Data ─────────────────────────────────────────────────────────────────────
-
-const FAMILY: FamilyMember[] = [
+// ─── Static Data ──────────────────────────────────────────────────────────────
+const MEMBERS: FamilyMember[] = [
   {
     id: "1",
     name: "Rajesh Sharma",
@@ -51,7 +46,9 @@ const FAMILY: FamilyMember[] = [
     bloodGroup: "O+",
     lastConsult: "Oct 12",
     records: 15,
-    initials: "RS",
+    avatar: "https://i.pravatar.cc/150?img=12",
+    bloodColor: "#DC2626",
+    bloodBg: "#FEF2F2",
   },
   {
     id: "2",
@@ -61,7 +58,9 @@ const FAMILY: FamilyMember[] = [
     bloodGroup: "B+",
     lastConsult: "Sep 28",
     records: 8,
-    initials: "SS",
+    avatar: "https://i.pravatar.cc/150?img=47",
+    bloodColor: "#DC2626",
+    bloodBg: "#FEF2F2",
   },
   {
     id: "3",
@@ -71,7 +70,9 @@ const FAMILY: FamilyMember[] = [
     bloodGroup: "B+",
     lastConsult: "Aug 15",
     records: 12,
-    initials: "RO",
+    avatar: "https://i.pravatar.cc/150?img=30",
+    bloodColor: "#DC2626",
+    bloodBg: "#FEF2F2",
   },
   {
     id: "4",
@@ -81,219 +82,312 @@ const FAMILY: FamilyMember[] = [
     bloodGroup: "B+",
     lastConsult: "Oct 05",
     records: 4,
-    initials: "PS",
+    avatar: "https://i.pravatar.cc/150?img=44",
+    bloodColor: "#DC2626",
+    bloodBg: "#FEF2F2",
   },
 ];
 
+// ─── Nav items ────────────────────────────────────────────────────────────────
+type NavItem = { id: string; label: string; icon: (a: boolean) => React.ReactNode };
 const NAV: NavItem[] = [
-  { key: "home", label: "Home", active: true },
-  { key: "records", label: "Records", active: false },
-  { key: "consult", label: "Consult", active: false },
-  { key: "orders", label: "Orders", active: false },
-  { key: "profile", label: "Profile", active: false },
+  { id: "home",    label: "Home",    icon: (a) => <Home     size={22} color={a ? "#069594" : "#9CA3AF"} strokeWidth={2} /> },
+  { id: "records", label: "Records", icon: (a) => <FileText size={22} color={a ? "#069594" : "#9CA3AF"} strokeWidth={2} /> },
+  { id: "orders",  label: "Orders",  icon: (a) => <ShoppingCart size={22} color={a ? "#069594" : "#9CA3AF"} strokeWidth={2} /> },
+  { id: "profile", label: "Profile", icon: (a) => <User     size={22} color={a ? "#069594" : "#9CA3AF"} strokeWidth={2} /> },
 ];
 
-// ─── Avatar ───────────────────────────────────────────────────────────────────
+// ─── Member Card ─────────────────────────────────────────────────────────────
+const MemberCard = ({ member }: { member: FamilyMember }) => (
+  <TouchableOpacity
+    activeOpacity={0.85}
+    style={{
+      backgroundColor: "#FFFFFF",
+      borderRadius: 20,
+      padding: 16,
+      marginBottom: 14,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.06,
+      shadowRadius: 8,
+      elevation: 3,
+    }}
+  >
+    {/* ── Top row: avatar | info | chevron ── */}
+    <View style={{ flexDirection: "row", alignItems: "center" }}>
+      {/* Avatar */}
+      <View
+        style={{
+          width: 52,
+          height: 52,
+          borderRadius: 9999,
+          overflow: "hidden",
+          flexShrink: 0,
+        }}
+      >
+        <Image
+          source={{ uri: member.avatar }}
+          style={{ width: 52, height: 52 }}
+        />
+      </View>
 
-function Avatar({ initials }: { initials: string }) {
-  return (
-    <View className="w-12 h-12 rounded-full bg-slate-400 items-center justify-center">
-      <Text className="text-sm font-bold text-white">{initials}</Text>
-    </View>
-  );
-}
+      {/* Name + meta */}
+      <View style={{ flex: 1, marginLeft: 14 }}>
+        <Typography variant="body" color="heading" className="font-bold" style={{ fontSize: 17 }}>
+          {member.name}
+        </Typography>
 
-// ─── Blood Badge ──────────────────────────────────────────────────────────────
+        <View style={{ flexDirection: "row", alignItems: "center", marginTop: 4, gap: 8 }}>
+          <Typography variant="body-small" color="secondary">
+            {member.relation} · {member.age} yrs
+          </Typography>
 
-function BloodBadge({ group }: { group: BloodGroup }) {
-  return (
-    <View className="bg-red-100 rounded-full px-2 py-0.5">
-      <Text className="text-[10px] font-bold text-red-700">{group}</Text>
-    </View>
-  );
-}
-
-// ─── Member Card ──────────────────────────────────────────────────────────────
-
-function MemberCard({
-  member,
-  onPress,
-}: {
-  member: FamilyMember;
-  onPress: () => void;
-}) {
-  return (
-    <TouchableOpacity
-      activeOpacity={0.7}
-      onPress={onPress}
-      className="bg-white rounded-xl p-4 shadow-sm"
-      style={{ elevation: 2 }}
-    >
-      {/* Top row */}
-      <View className="flex-row items-center justify-between">
-        <View className="flex-row items-center gap-3">
-          <Avatar initials={member.initials} />
-          <View className="gap-0.5">
-            <Text className="text-base font-bold text-[#1A2B4B]">
-              {member.name}
-            </Text>
-            <View className="flex-row items-center gap-2">
-              <Text className="text-xs text-[#4E5E81]">
-                {member.relation} · {member.age} yrs
-              </Text>
-              <BloodBadge group={member.bloodGroup} />
-            </View>
+          {/* Blood group badge */}
+          <View
+            style={{
+              backgroundColor: member.bloodBg,
+              paddingHorizontal: 8,
+              paddingVertical: 2,
+              borderRadius: 6,
+            }}
+          >
+            <Typography
+              variant="body-small"
+              className="font-bold"
+              style={{ fontSize: 11, color: member.bloodColor }}
+            >
+              {member.bloodGroup}
+            </Typography>
           </View>
         </View>
-        <ChevronRight size={16} color="#CBD5E1" />
       </View>
 
-      {/* Divider + bottom stats */}
-      <View className="flex-row justify-between items-center mt-3 pt-3 border-t border-slate-50">
-        <View className="flex-row items-center gap-1">
-          <Calendar size={12} color="#4E5E81" />
-          <Text className="text-[11px] text-[#4E5E81]">
-            Last consult: {member.lastConsult}
-          </Text>
-        </View>
-        <View className="flex-row items-center gap-1">
-          <FolderOpen size={12} color="#4E5E81" />
-          <Text className="text-[11px] text-[#4E5E81]">
-            {member.records} Records
-          </Text>
-        </View>
+      {/* Chevron */}
+      <ChevronRight size={20} color="#CBD5E1" strokeWidth={2} />
+    </View>
+
+    {/* ── Divider ── */}
+    <View
+      style={{
+        height: 1,
+        backgroundColor: "#E5E7EB",
+        marginVertical: 12,
+        width: "100%",
+      }}
+    />
+
+    {/* ── Bottom row: last consult | records ── */}
+    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+      {/* Last consult */}
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+        <CalendarDays size={14} color="#9CA3AF" strokeWidth={1.8} />
+        <Typography variant="body-small" color="secondary" style={{ fontSize: 12 }}>
+          Last consult: {member.lastConsult}
+        </Typography>
       </View>
-    </TouchableOpacity>
-  );
-}
 
-// ─── Nav Icon ─────────────────────────────────────────────────────────────────
-
-function NavIcon({ itemKey, active }: { itemKey: string; active: boolean }) {
-  const color = active ? "#2ECC8B" : "#94A3B8";
-  switch (itemKey) {
-    case "home":
-      return <Home size={20} color={color} />;
-    case "records":
-      return <FileText size={20} color={color} />;
-    case "consult":
-      return <Stethoscope size={20} color={color} />;
-    case "orders":
-      return <ShoppingCart size={20} color={color} />;
-    case "profile":
-      return <User size={20} color={color} />;
-    default:
-      return null;
-  }
-}
+      {/* Records */}
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+        <Folder size={14} color="#9CA3AF" strokeWidth={1.8} />
+        <Typography variant="body-small" color="secondary" style={{ fontSize: 12 }}>
+          {member.records} Records
+        </Typography>
+      </View>
+    </View>
+  </TouchableOpacity>
+);
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
-
 export default function ManageFamilyScreen() {
-  const handleMember = (id: string) => console.log("Open member:", id);
-  const handleAddMember = () => console.log("Add new member");
-  const handleBack = () => console.log("Go back");
+  const [activeNav, setActiveNav] = useState("home");
 
   return (
-    <SafeAreaView className="flex-1 bg-[#F7F9FC]">
-      {/* ── Header ── */}
-      <View className="flex-row items-center justify-between px-4 h-16 bg-white">
-        <TouchableOpacity
-          onPress={handleBack}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <ArrowLeft size={20} color="#1A2B4B" />
+    <SafeAreaView
+      style={{
+        flex: 1,
+        backgroundColor: "#F2F5F7",
+        paddingTop: Platform.OS === "android" ? StatusBar.currentHeight : 0,
+      }}
+    >
+      <StatusBar barStyle="dark-content" backgroundColor="#F2F5F7" />
+
+      {/* ── Header (outside scroll so it stays pinned) ── */}
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          paddingHorizontal: 24,
+          paddingTop: 16,
+          paddingBottom: 6,
+          gap: 12,
+        }}
+      >
+        <TouchableOpacity activeOpacity={0.7}>
+          <ArrowLeft size={22} color="#1A2B4B" strokeWidth={2.3} />
         </TouchableOpacity>
-        <Text className="text-base font-bold text-[#1A2B4B]">
+        <Typography variant="h3" color="heading">
           Manage Family
-        </Text>
-        {/* Spacer keeps title centred */}
-        <View className="w-5" />
+        </Typography>
       </View>
 
-      {/* ── Body ── */}
+      {/* ── Scrollable content ── */}
       <ScrollView
-        className="flex-1"
-        contentContainerStyle={{
-          paddingHorizontal: 16,
-          paddingTop: 20,
-          paddingBottom: 100,
-        }}
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={{
+          paddingHorizontal: 24,
+          paddingTop: 8,
+          paddingBottom: 130, // clears FAB + nav bar
+        }}
       >
         {/* Subtitle */}
-        <Text className="text-sm font-medium text-[#4E5E81] mb-4">
-          {FAMILY.length} members in The Sharma Family
-        </Text>
+        <Typography variant="body" color="secondary" className="mb-6">
+          4 members in The Sharma Family
+        </Typography>
 
-        {/* Member Cards */}
-        <View className="gap-4">
-          {FAMILY.map((member) => (
-            <MemberCard
-              key={member.id}
-              member={member}
-              onPress={() => handleMember(member.id)}
-            />
-          ))}
+        {/* Member cards */}
+        {MEMBERS.map((m) => (
+          <MemberCard key={m.id} member={m} />
+        ))}
 
-          {/* Add New Member Card */}
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={handleAddMember}
-            className="h-28 rounded-xl border-2 border-dashed border-emerald-300/50 bg-emerald-50/20 items-center justify-center gap-2"
+        {/* ── Add New Member ── */}
+        <TouchableOpacity
+          activeOpacity={0.8}
+          style={{
+            borderWidth: 2,
+            borderStyle: "dashed",
+            borderColor: "#A3D6D5",
+            backgroundColor: "#F4FAFA",
+            borderRadius: 20,
+            paddingVertical: 28,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          {/* Teal circle with + */}
+          <View
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: 9999,
+              backgroundColor: "#069594",
+              alignItems: "center",
+              justifyContent: "center",
+              marginBottom: 10,
+              shadowColor: "#069594",
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.28,
+              shadowRadius: 8,
+              elevation: 5,
+            }}
           >
-            <View className="w-10 h-10 rounded-full bg-[#2DC97E] items-center justify-center">
-              <Plus size={18} color="#fff" strokeWidth={2.5} />
-            </View>
-            <Text className="text-sm font-bold text-emerald-500">
-              + Add New Member
-            </Text>
-          </TouchableOpacity>
-        </View>
+            <Plus size={22} color="#FFFFFF" strokeWidth={2.5} />
+          </View>
+
+          <Typography variant="body" color="primary" className="font-bold">
+            + Add New Member
+          </Typography>
+        </TouchableOpacity>
       </ScrollView>
 
-      {/* ── Bottom Navigation ── */}
-      <View className="absolute bottom-0 left-0 right-0 h-[76px] flex-row items-center justify-between px-6 pb-3 bg-white/90 border-t border-slate-200">
-        {NAV.map((item) => {
-          if (item.key === "consult") {
-            return (
-              <View key={item.key} className="items-center gap-1 -mt-7">
-                <TouchableOpacity
-                  activeOpacity={0.85}
-                  className="w-14 h-14 rounded-full bg-[#2ECC8B] items-center justify-center border-4 border-[#F8FDFB]"
-                  style={{
-                    shadowColor: "#2ECC8B",
-                    shadowOffset: { width: 0, height: 10 },
-                    shadowOpacity: 0.4,
-                    shadowRadius: 15,
-                    elevation: 8,
-                  }}
-                >
-                  <Stethoscope size={24} color="#fff" />
-                </TouchableOpacity>
-                <Text className="text-[10px] font-medium text-slate-400">
-                  {item.label}
-                </Text>
-              </View>
-            );
-          }
-
+      {/* ════════════════════════════════════════════════════════════════════
+          BOTTOM NAVIGATION
+          ════════════════════════════════════════════════════════════════════ */}
+      <View
+        style={{
+          position: "absolute",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          backgroundColor: "#FFFFFF",
+          borderTopWidth: 1,
+          borderTopColor: "#E5E7EB",
+          flexDirection: "row",
+          alignItems: "flex-end",
+          paddingBottom: Platform.OS === "ios" ? 24 : 12,
+          paddingTop: 10,
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: -4 },
+          shadowOpacity: 0.07,
+          shadowRadius: 12,
+          elevation: 20,
+          zIndex: 50,
+        }}
+      >
+        {/* Left pair: Home, Records */}
+        {NAV.slice(0, 2).map((item) => {
+          const active = activeNav === item.id;
           return (
             <TouchableOpacity
-              key={item.key}
+              key={item.id}
+              onPress={() => setActiveNav(item.id)}
               activeOpacity={0.7}
-              className="items-center gap-1"
+              style={{ flex: 1, alignItems: "center" }}
             >
-              <NavIcon itemKey={item.key} active={item.active} />
-              <Text
-                className={`text-[10px] ${
-                  item.active
-                    ? "font-bold text-[#2ECC8B]"
-                    : "font-medium text-slate-400"
-                }`}
+              {item.icon(active)}
+              <Typography
+                variant="body-small"
+                color={active ? "primary" : "secondary"}
+                className={active ? "font-bold mt-1" : "mt-1"}
+                style={{ fontSize: 10 }}
               >
                 {item.label}
-              </Text>
+              </Typography>
+            </TouchableOpacity>
+          );
+        })}
+
+        {/* Centre slot — FAB floats above */}
+        <View style={{ flex: 1, alignItems: "center" }}>
+          <TouchableOpacity
+            activeOpacity={0.85}
+            style={{
+              width: 62,
+              height: 62,
+              borderRadius: 9999,
+              backgroundColor: "#069594",
+              alignItems: "center",
+              justifyContent: "center",
+              marginTop: -30,           // floats above the nav bar
+              borderWidth: 4,
+              borderColor: "#FFFFFF",
+              shadowColor: "#069594",
+              shadowOffset: { width: 0, height: 8 },
+              shadowOpacity: 0.38,
+              shadowRadius: 14,
+              elevation: 14,
+            }}
+          >
+            <BriefcaseMedical size={26} color="#FFFFFF" strokeWidth={2} />
+          </TouchableOpacity>
+          <Typography
+            variant="body-small"
+            color="secondary"
+            className="mt-1"
+            style={{ fontSize: 10 }}
+          >
+            Consult
+          </Typography>
+        </View>
+
+        {/* Right pair: Orders, Profile */}
+        {NAV.slice(2).map((item) => {
+          const active = activeNav === item.id;
+          return (
+            <TouchableOpacity
+              key={item.id}
+              onPress={() => setActiveNav(item.id)}
+              activeOpacity={0.7}
+              style={{ flex: 1, alignItems: "center" }}
+            >
+              {item.icon(active)}
+              <Typography
+                variant="body-small"
+                color={active ? "primary" : "secondary"}
+                className={active ? "font-bold mt-1" : "mt-1"}
+                style={{ fontSize: 10 }}
+              >
+                {item.label}
+              </Typography>
             </TouchableOpacity>
           );
         })}
