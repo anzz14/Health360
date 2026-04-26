@@ -1,269 +1,166 @@
-import { Text } from "@/components";
 import { Button } from "@/components/button/button";
 import { Input } from "@/components/inputs/input";
 import { Typography } from "@/components/typography/typography";
+import { useAuth } from "@/context/auth-context";
 import { Link, router } from "expo-router";
-import { ArrowLeft, Eye, EyeOff, Lock, User } from "lucide-react-native";
-import React, { useState } from "react";
+import { ArrowLeft } from "lucide-react-native";
+import { useState } from "react";
 
 import {
-  KeyboardAvoidingView,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  TouchableOpacity,
-  View,
+    KeyboardAvoidingView,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
-export default function CreateAccountScreen({
-  onLogin,
-}: {
-  onBack?: () => void;
-  onLogin?: () => void;
-}) {
-  const [formData, setFormData] = useState({
-    name: "",
-    phone: "",
-    password: "",
-  });
+export default function CreateAccountScreen() {
+  const { signUp } = useAuth();
 
-  const [agreed, setAgreed] = useState(false);
-  const [nameFocused, setNameFocused] = useState(false);
-  const [phoneFocused, setPhoneFocused] = useState(false);
-  const [passwordFocused, setPasswordFocused] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const PRIMARY = "#008080";
-  const HEADING = "#1A2B4B";
-  const GRAY = "#6B7280";
-  const BORDER = "#E5E7EB";
+  const handleSignUp = async () => {
+    if (!email || !password || !confirm) {
+      setError("Please fill in all fields");
+      return;
+    }
+    if (password !== confirm) {
+      setError("Passwords do not match");
+      return;
+    }
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters");
+      return;
+    }
 
-  const sendOTP = () => {
-    console.log("Send OTP");
+    setError("");
+    setLoading(true);
+    const { error } = await signUp(email, password);
+    setLoading(false);
+
+    if (error) {
+      setError(error);
+    } else {
+      // On success -> _layout.tsx detects session + no phone -> redirects to addPhone
+    }
   };
 
   return (
     <SafeAreaView className="flex-1 bg-white">
-      <StatusBar barStyle="light-content" backgroundColor="#FFFFFF" />
-
       <KeyboardAvoidingView
-        className="flex-1"
+        style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <ScrollView
           contentContainerStyle={{ flexGrow: 1 }}
           keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
         >
-          {/* Header */}
           <View className="px-4 pt-4 h-16 justify-center">
             <TouchableOpacity
               onPress={() => router.push("/(auth)/login")}
               activeOpacity={0.7}
               className="w-8 h-8 rounded-full items-center justify-center"
             >
-              <ArrowLeft size={22} color={"#374151"} strokeWidth={2.5} />
+              <ArrowLeft size={22} color="#374151" strokeWidth={2.5} />
             </TouchableOpacity>
           </View>
 
           <View className="flex-1 px-7 pt-4">
-            {/* Hero */}
             <View className="items-center mb-9">
-              <Typography className="mb-2.5" variant="h2" color="heading">
-                Create Your Account
+              <Typography variant="h2" color="heading" className="mb-2.5">
+                Create Account
               </Typography>
-              <Typography className="mt" variant="body" color="default">
+              <Typography variant="body" color="default">
                 Join thousands of families managing health together
               </Typography>
             </View>
 
             <View className="gap-5">
-              {/* Full Name Field */}
               <View>
                 <Typography
-                  className="mb-2 ml-0.5"
                   variant="body"
                   color="heading"
+                  className="mb-2 ml-0.5"
                 >
                   Email
                 </Typography>
-
                 <Input
-                  prefix={<User />}
-                  placeholder="AnzzSharma@gmail.com"
-                  keyboardType="default"
-                  value={formData.name}
-                  onChangeText={(text) =>
-                    setFormData({ ...formData, name: text })
-                  }
-                  maxLength={50}
-                  required
+                  placeholder="you@example.com"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  value={email}
+                  onChangeText={setEmail}
                 />
               </View>
 
-              {/* Phone Number Field */}
-             
-              {/* Password Field */}
               <View>
                 <Typography
-                  className="mb-2 ml-0.5"
                   variant="body"
                   color="heading"
+                  className="mb-2 ml-0.5"
                 >
                   Password
                 </Typography>
-                <View
-                  className="h-14 rounded-2xl bg-white flex-row items-center overflow-hidden"
-                  style={{
-                    borderWidth: 1,
-                    borderColor: passwordFocused ? PRIMARY : BORDER,
-                  }}
-                >
-                  <Input
-                    prefix={<Lock size={18} color={GRAY} />}
-                    placeholder="Enter your password"
-                    secureTextEntry={!showPassword}
-                    value={formData.password}
-                    onChangeText={(text) =>
-                      setFormData({ ...formData, password: text })
-                    }
-                    onFocus={() => setPasswordFocused(true)}
-                    onBlur={() => setPasswordFocused(false)}
-                    maxLength={64}
-                    required
-                    suffix={
-                      <TouchableOpacity
-                        onPress={() => setShowPassword(!showPassword)}
-                        activeOpacity={0.7}
-                        className="pr-4"
-                      >
-                        {showPassword ? (
-                          <EyeOff size={18} color={GRAY} />
-                        ) : (
-                          <Eye size={18} color={GRAY} />
-                        )}
-                      </TouchableOpacity>
-                    }
-                  />
-                </View>
+                <Input
+                  placeholder="Min. 6 characters"
+                  secureTextEntry
+                  value={password}
+                  onChangeText={setPassword}
+                />
               </View>
 
-               <View>
+              <View>
                 <Typography
-                  className="mb-2 ml-0.5"
                   variant="body"
                   color="heading"
+                  className="mb-2 ml-0.5"
                 >
-                  Phone Number
+                  Confirm Password
                 </Typography>
-                <View
-                  className="h-14 rounded-2xl bg-white flex-row items-center overflow-hidden"
-                  style={{
-                    borderWidth: 1,
-                    borderColor: phoneFocused ? PRIMARY : BORDER,
-                  }}
-                >
-                  <Input
-                    prefix="+91"
-                    placeholder="000 000 0000"
-                    keyboardType="phone-pad"
-                    value={formData.phone}
-                    onChangeText={(text) =>
-                      setFormData({ ...formData, phone: text })
-                    }
-                    maxLength={10}
-                    required
-                  />
-                </View>
+                <Input
+                  placeholder="Repeat password"
+                  secureTextEntry
+                  value={confirm}
+                  onChangeText={setConfirm}
+                />
               </View>
-
-              {/* Checkbox */}
-              <TouchableOpacity
-                activeOpacity={0.7}
-                onPress={() => setAgreed(!agreed)}
-                className="flex-row items-start gap-3 pt-1"
-              >
-                <View
-                  className="w-6 h-6 rounded-2xl items-center justify-center mt-0.5"
-                  style={{
-                    borderWidth: 1.5,
-                    borderColor: agreed ? PRIMARY : BORDER,
-                    backgroundColor: agreed ? PRIMARY : "#fff",
-                  }}
-                >
-                  {agreed && (
-                    <Text
-                      className="text-white font-bold"
-                      style={{ fontSize: 12 }}
-                    >
-                      ✓
-                    </Text>
-                  )}
-                </View>
-                <View className="flex-row flex-wrap items-center">
-                  <Typography className="opacity-70" variant="body" color="default">
-                    I agree to the{" "}
-                  </Typography>
-                  <Typography variant="body" color="primary">
-                    Terms of Service{" "}
-                  </Typography>
-                  <Typography className="opacity-70" variant="body" color="default">
-                    and{" "}
-                  </Typography>
-                  <Typography variant="body" color="primary">
-                    Privacy Policy
-                  </Typography>
-                </View>
-              </TouchableOpacity>
             </View>
 
+            {error ? (
+              <Typography
+                variant="body-small"
+                color="error"
+                className="mt-3 ml-1"
+              >
+                {error}
+              </Typography>
+            ) : null}
+
             <Button
-              title="Send OTP"
-              onPress={sendOTP}
+              title="Create Account"
+              onPress={handleSignUp}
               variant="primary"
               rounded="full"
-              className="mt-4"
               size="lg"
+              loading={loading}
+              className="mt-6"
             />
 
-            {/* Divider */}
-            <View className="flex-row items-center gap-3 my-7">
-              <View className="flex-1 h-px" style={{ backgroundColor: BORDER }} />
-              <Text
-                className="font-bold tracking-wider"
-                style={{ fontSize: 13, color: GRAY, letterSpacing: 1.5 }}
-              >
-                — OR —
-              </Text>
-              <View className="flex-1 h-px" style={{ backgroundColor: BORDER }} />
-            </View>
-
-            {/* Google Button */}
-            <Button
-              title="Continue with Google"
-              leftIcon={<User />}
-              onPress={sendOTP}
-              rounded="full"
-              className="mt-4 bg-white border border-muted"
-              textClassName="text-heading"
-              size="lg"
-            />
-
-            {/* Footer */}
-            <View className="flex-1 justify-end pb-8 pt-8">
-              <View className="flex-row justify-center items-center gap-1">
-                <Text className="text-sm" style={{ color: GRAY, fontFamily: "Inter_400Regular" }}>
-                  Already have an account?
-                </Text>
-                <TouchableOpacity onPress={onLogin} activeOpacity={0.7}>
-                  <Link href="/login">
-                    <Text className="font-bold text-sm" style={{ color: PRIMARY }}>
-                      Log In
-                    </Text>
-                  </Link>
-                </TouchableOpacity>
-              </View>
+            <View className="flex-1 justify-end pb-8 pt-8 items-center">
+              <Typography variant="body-small" color="default">
+                Already have an account?{" "}
+                <Link href="/(auth)/login">
+                  <Typography variant="body-small" color="primary">
+                    {" "}
+                    Log In
+                  </Typography>
+                </Link>
+              </Typography>
             </View>
           </View>
         </ScrollView>
