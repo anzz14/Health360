@@ -6,10 +6,12 @@ import {
 
 import { AuthProvider, useAuth } from "@/context/auth-context";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { ActivityIndicator, View } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 import "./global.css";
 
@@ -83,11 +85,17 @@ export default function RootLayout() {
   if (!loaded) return null;
 
   return (
-    <AuthProvider>
-      <ThemeProvider value={colorScheme === "light" ? DarkTheme : DefaultTheme}>
-        <RootNavigator />
-        <StatusBar style="auto" />
-      </ThemeProvider>
-    </AuthProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <BottomSheetModalProvider>
+        <AuthProvider>
+          <ThemeProvider
+            value={colorScheme === "light" ? DarkTheme : DefaultTheme}
+          >
+            <RootNavigator />
+            <StatusBar style="auto" />
+          </ThemeProvider>
+        </AuthProvider>
+      </BottomSheetModalProvider>
+    </GestureHandlerRootView>
   );
 }

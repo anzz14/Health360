@@ -1,10 +1,12 @@
 import { Typography } from "@/components/typography/typography";
+import { useAuth } from "@/context/auth-context";
+import { supabase } from "@/lib/supabase";
+import { useRouter } from "expo-router";
 import {
   BriefcaseMedical,
   ChevronRight,
   Clock,
   CreditCard,
-  FileText,
   FlaskConical,
   Home,
   MapPin,
@@ -12,10 +14,12 @@ import {
   Plus,
   ShoppingCart,
   User,
-  Video,
+  Users,
+  Video
 } from "lucide-react-native";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Image,
   Platform,
   SafeAreaView,
@@ -45,55 +49,11 @@ type QuickAction = {
 type NavItem = {
   id: string;
   label: string;
+  route: string;
   icon: (active: boolean) => React.ReactNode;
 };
 
-// ─── Static Data ──────────────────────────────────────────────────────────────
-const FAMILY: FamilyMember[] = [
-  { id: "me", label: "Me", isMe: true },
-  { id: "mom", label: "Mom", avatar: "https://i.pravatar.cc/150?img=47" },
-  { id: "dad", label: "Dad", avatar: "https://i.pravatar.cc/150?img=12" },
-  { id: "junior", label: "Junior", avatar: "https://i.pravatar.cc/150?img=30" },
-];
-
-const NAV: NavItem[] = [
-  {
-    id: "home",
-    label: "Home",
-    icon: (a) => (
-      <Home size={22} color={a ? "#069594" : "#9CA3AF"} strokeWidth={2} />
-    ),
-  },
-  {
-    id: "records",
-    label: "Records",
-    icon: (a) => (
-      <FileText size={22} color={a ? "#069594" : "#9CA3AF"} strokeWidth={2} />
-    ),
-  },
-  {
-    id: "orders",
-    label: "Orders",
-    icon: (a) => (
-      <ShoppingCart
-        size={22}
-        color={a ? "#069594" : "#9CA3AF"}
-        strokeWidth={2}
-      />
-    ),
-  },
-  {
-    id: "profile",
-    label: "Profile",
-    icon: (a) => (
-      <User size={22} color={a ? "#069594" : "#9CA3AF"} strokeWidth={2} />
-    ),
-  },
-];
-
 // ─── Sub-components ───────────────────────────────────────────────────────────
-
-/** Family member avatar card */
 const MemberCard = ({
   member,
   active,
@@ -119,7 +79,6 @@ const MemberCard = ({
         backgroundColor: active ? "#069594" : "#FFFFFF",
         borderWidth: active ? 0 : 1,
         borderColor: "#E5E7EB",
-        // shadow
         shadowColor: active ? "#069594" : "#000",
         shadowOffset: { width: 0, height: active ? 6 : 1 },
         shadowOpacity: active ? 0.28 : 0.05,
@@ -135,7 +94,9 @@ const MemberCard = ({
           style={{ width: 72, height: 72 }}
         />
       ) : (
-        <User size={28} color={active ? "#fff" : "#94A3B8"} strokeWidth={2} />
+        <Typography variant="h3" color={active ? "white" : "primary"}>
+          {member.label.charAt(0)}
+        </Typography>
       )}
     </View>
     <Typography
@@ -148,7 +109,6 @@ const MemberCard = ({
   </TouchableOpacity>
 );
 
-/** Quick action bento card — strictly w-[48%] */
 const ActionCard = ({ action }: { action: QuickAction }) => (
   <TouchableOpacity
     activeOpacity={0.85}
@@ -165,7 +125,6 @@ const ActionCard = ({ action }: { action: QuickAction }) => (
       elevation: action.dark ? 6 : 2,
     }}
   >
-    {/* Icon container */}
     <View
       style={{
         width: 44,
@@ -178,8 +137,6 @@ const ActionCard = ({ action }: { action: QuickAction }) => (
     >
       {action.icon}
     </View>
-
-    {/* Text */}
     <Typography
       variant="body"
       color={action.dark ? "white" : "heading"}
@@ -199,8 +156,55 @@ const ActionCard = ({ action }: { action: QuickAction }) => (
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function DashboardScreen() {
+  const { user } = useAuth();
+  const router = useRouter();
+
+  // State
+  const [loading, setLoading] = useState(true);
+  const [hasFamily, setHasFamily] = useState(false);
+  const [primaryName, setPrimaryName] = useState("");
+  const [primaryAvatar, setPrimaryAvatar] = useState<string | null>(null);
+  const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
   const [activeMember, setActiveMember] = useState("me");
-  const [activeNav, setActiveNav] = useState("home");
+
+  const NAV: NavItem[] = [
+    {
+      id: "home",
+      label: "Home",
+      route: "/(tabs)/familyCareDashboard",
+      icon: (a) => (
+        <Home size={22} color={a ? "#069594" : "#9CA3AF"} strokeWidth={2} />
+      ),
+    },
+    {
+      id: "records",
+      label: "Manage",
+      route: "/(tabs)/manageFamily",
+      icon: (a) => (
+        <Users size={22} color={a ? "#069594" : "#9CA3AF"} strokeWidth={2} />
+      ),
+    },
+    {
+      id: "orders",
+      label: "Orders",
+      route: "/(tabs)/familyCareDashboard",
+      icon: (a) => (
+        <ShoppingCart
+          size={22}
+          color={a ? "#069594" : "#9CA3AF"}
+          strokeWidth={2}
+        />
+      ),
+    },
+    {
+      id: "profile",
+      label: "Profile",
+      route: "/(tabs)/userDetail",
+      icon: (a) => (
+        <User size={22} color={a ? "#069594" : "#9CA3AF"} strokeWidth={2} />
+      ),
+    },
+  ];
 
   const quickActions: QuickAction[] = [
     {
@@ -234,6 +238,63 @@ export default function DashboardScreen() {
     },
   ];
 
+  // ─── Fetch Data ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      if (!user) return;
+      try {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("active_family_id, full_name, avatar_url")
+          .eq("id", user.id)
+          .single();
+
+        if (profile?.full_name) setPrimaryName(profile.full_name.split(" ")[0]);
+        if (profile?.avatar_url) setPrimaryAvatar(profile.avatar_url);
+
+        if (profile?.active_family_id) {
+          setHasFamily(true);
+          const { data: membersData } = await supabase
+            .from("family_members")
+            .select("id, full_name, avatar_url, relationship")
+            .eq("family_id", profile.active_family_id);
+
+          if (membersData) {
+            const mappedMembers = membersData.map((m: any) => ({
+              id: m.id,
+              label:
+                m.relationship === "Self" ? "Me" : m.full_name.split(" ")[0],
+              avatar: m.avatar_url,
+              isMe: m.relationship === "Self",
+            }));
+
+            mappedMembers.sort((a, b) => (a.isMe ? -1 : b.isMe ? 1 : 0));
+            setFamilyMembers(mappedMembers);
+            if (mappedMembers.length > 0) setActiveMember(mappedMembers[0].id);
+          }
+        } else {
+          setHasFamily(false);
+          // If no family, just show a "Me" card
+          setFamilyMembers([{ id: "me", label: "Me", isMe: true }]);
+        }
+      } catch (error) {
+        console.error("Dashboard fetch error:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, [user]);
+
+  if (loading)
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator size="large" color="#069594" />
+      </View>
+    );
+
+  // ─── DASHBOARD ───
   return (
     <SafeAreaView
       style={{
@@ -248,21 +309,16 @@ export default function DashboardScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 120 }}
       >
-        {/* ════════════════════════════════════════════════════════════════════
-            A. HEADER
-            ════════════════════════════════════════════════════════════════════ */}
-        <View className="flex-row justify-between items-center px-6 mt-6">
-          {/* Left: greeting */}
+        {/* HEADER */}
+        <View className="flex-row justify-between items-center px-6 mt-6 mb-4">
           <View>
             <Typography variant="body-small" color="secondary">
               Welcome back,
             </Typography>
             <Typography variant="h2" color="heading">
-              Hello, Alex
+              Hello, {primaryName || "User"}
             </Typography>
           </View>
-
-          {/* Right: avatar + online dot */}
           <View style={{ position: "relative" }}>
             <View
               style={{
@@ -272,14 +328,22 @@ export default function DashboardScreen() {
                 overflow: "hidden",
                 borderWidth: 2.5,
                 borderColor: "rgba(6,149,148,0.2)",
+                backgroundColor: "#E6F7F7",
+                alignItems: "center",
+                justifyContent: "center",
               }}
             >
-              <Image
-                source={{ uri: "https://i.pravatar.cc/150?img=33" }}
-                style={{ width: 48, height: 48 }}
-              />
+              {primaryAvatar ? (
+                <Image
+                  source={{ uri: primaryAvatar }}
+                  style={{ width: 48, height: 48 }}
+                />
+              ) : (
+                <Typography variant="h3" color="primary">
+                  {primaryName.charAt(0) || "U"}
+                </Typography>
+              )}
             </View>
-            {/* Status dot */}
             <View
               style={{
                 position: "absolute",
@@ -296,33 +360,74 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        {/* ════════════════════════════════════════════════════════════════════
-            B. FAMILY MEMBERS
-            ════════════════════════════════════════════════════════════════════ */}
-        <View className="mt-8">
-          {/* Row header */}
+        {/* SETUP NUDGE (Only shows if they haven't created a family yet) */}
+        {!hasFamily && (
+          <View className="px-6 mb-4">
+            <TouchableOpacity
+              onPress={() => router.push("/(tabs)/familyInfo")}
+              activeOpacity={0.8}
+              style={{
+                backgroundColor: "#E0F4F4",
+                borderRadius: 16,
+                padding: 16,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <View style={{ flex: 1, marginRight: 16 }}>
+                <Typography variant="subtitle" color="heading" className="mb-1">
+                  Complete Setup
+                </Typography>
+                <Typography variant="body-small" color="secondary">
+                  Create or join a family to unlock full medical profiles.
+                </Typography>
+              </View>
+              <View
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 18,
+                  backgroundColor: "#069594",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <ChevronRight color="#fff" size={20} />
+              </View>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* FAMILY MEMBERS SCROLL */}
+        <View className="mt-4">
           <View className="flex-row justify-between items-center px-6 mb-4">
             <Typography variant="h3" color="heading">
               Family Members
             </Typography>
-            <TouchableOpacity activeOpacity={0.7}>
+            <TouchableOpacity
+              onPress={() =>
+                router.push(
+                  hasFamily ? "/(tabs)/manageFamily" : "/(tabs)/familyInfo",
+                )
+              }
+              activeOpacity={0.7}
+            >
               <Typography
                 variant="body-small"
                 color="primary"
                 className="font-bold"
               >
-                View All
+                Manage All
               </Typography>
             </TouchableOpacity>
           </View>
-
-          {/* Horizontal scroll — padding-left 24 px, trailing space via paddingRight */}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ paddingHorizontal: 24, gap: 0 }}
           >
-            {FAMILY.map((m) => (
+            {familyMembers.map((m) => (
               <MemberCard
                 key={m.id}
                 member={m}
@@ -330,10 +435,13 @@ export default function DashboardScreen() {
                 onPress={() => setActiveMember(m.id)}
               />
             ))}
-
-            {/* Add button */}
             <View style={{ alignItems: "center" }}>
               <TouchableOpacity
+                onPress={() =>
+                  router.push(
+                    hasFamily ? "/(tabs)/manageFamily" : "/(tabs)/familyInfo",
+                  )
+                }
                 activeOpacity={0.7}
                 style={{
                   width: 72,
@@ -360,37 +468,27 @@ export default function DashboardScreen() {
           </ScrollView>
         </View>
 
-        {/* ════════════════════════════════════════════════════════════════════
-            C. QUICK ACTIONS — Bento grid (strict w-[48%])
-            ════════════════════════════════════════════════════════════════════ */}
+        {/* QUICK ACTIONS */}
         <View className="mt-8 px-6">
           <Typography variant="h3" color="heading" className="mb-4">
             Quick Actions
           </Typography>
-
-          {/* Row 1 */}
           <View className="flex-row justify-between mb-4">
             <ActionCard action={quickActions[0]} />
             <ActionCard action={quickActions[1]} />
           </View>
-          {/* Row 2 */}
           <View className="flex-row justify-between">
             <ActionCard action={quickActions[2]} />
             <ActionCard action={quickActions[3]} />
           </View>
         </View>
 
-        {/* ════════════════════════════════════════════════════════════════════
-            D. UPCOMING APPOINTMENTS
-            ════════════════════════════════════════════════════════════════════ */}
+        {/* UPCOMING APPOINTMENTS */}
         <View className="mt-8 px-6">
-          {/* Row header */}
           <View className="flex-row justify-between items-center mb-4">
             <Typography variant="h3" color="heading">
               Upcoming Appointments
             </Typography>
-
-            {/* Active badge */}
             <View
               style={{
                 backgroundColor: "#E0F4F4",
@@ -409,8 +507,6 @@ export default function DashboardScreen() {
               </Typography>
             </View>
           </View>
-
-          {/* Appointment card */}
           <View
             style={{
               backgroundColor: "#FFFFFF",
@@ -425,7 +521,6 @@ export default function DashboardScreen() {
               elevation: 3,
             }}
           >
-            {/* Date block */}
             <View
               style={{
                 width: 60,
@@ -455,8 +550,6 @@ export default function DashboardScreen() {
                 12
               </Typography>
             </View>
-
-            {/* Details */}
             <View style={{ flex: 1 }}>
               <Typography variant="body" color="heading" className="font-bold">
                 Dr. Sarah Jenkins
@@ -468,8 +561,6 @@ export default function DashboardScreen() {
               >
                 Cardiologist · General Checkup
               </Typography>
-
-              {/* Time & room row */}
               <View className="flex-row items-center mt-2" style={{ gap: 12 }}>
                 <View className="flex-row items-center" style={{ gap: 4 }}>
                   <Clock size={13} color="#069594" strokeWidth={2} />
@@ -493,16 +584,12 @@ export default function DashboardScreen() {
                 </View>
               </View>
             </View>
-
-            {/* Chevron */}
             <ChevronRight size={20} color="#CBD5E1" strokeWidth={2} />
           </View>
         </View>
       </ScrollView>
 
-      {/* ════════════════════════════════════════════════════════════════════
-          E. CUSTOM BOTTOM NAVIGATION
-          ════════════════════════════════════════════════════════════════════ */}
+      {/* CUSTOM BOTTOM NAVIGATION */}
       <View
         style={{
           position: "absolute",
@@ -523,32 +610,25 @@ export default function DashboardScreen() {
           elevation: 16,
         }}
       >
-        {/* Left two tabs: Home, Records */}
-        {NAV.slice(0, 2).map((item) => {
-          const isActive = activeNav === item.id;
-          return (
-            <TouchableOpacity
-              key={item.id}
-              onPress={() => setActiveNav(item.id)}
-              activeOpacity={0.7}
-              style={{ flex: 1, alignItems: "center" }}
+        {NAV.slice(0, 2).map((item) => (
+          <TouchableOpacity
+            key={item.id}
+            onPress={() => router.push(item.route as any)}
+            activeOpacity={0.7}
+            style={{ flex: 1, alignItems: "center" }}
+          >
+            {item.icon(item.id === "home")}
+            <Typography
+              variant="body-small"
+              color={item.id === "home" ? "primary" : "secondary"}
+              className={`mt-1 ${item.id === "home" ? "font-bold" : ""}`}
+              style={{ fontSize: 10 }}
             >
-              {item.icon(isActive)}
-              <Typography
-                variant="body-small"
-                color={isActive ? "primary" : "secondary"}
-                className={`mt-1 ${isActive ? "font-bold" : ""}`}
-                style={{ fontSize: 10 }}
-              >
-                {item.label}
-              </Typography>
-            </TouchableOpacity>
-          );
-        })}
-
-        {/* Center FAB — Consult */}
+              {item.label}
+            </Typography>
+          </TouchableOpacity>
+        ))}
         <View style={{ flex: 1, alignItems: "center", position: "relative" }}>
-          {/* The FAB breaks up out of the nav bar */}
           <View style={{ alignItems: "center", marginBottom: 2 }}>
             <TouchableOpacity
               activeOpacity={0.85}
@@ -559,7 +639,7 @@ export default function DashboardScreen() {
                 backgroundColor: "#069594",
                 alignItems: "center",
                 justifyContent: "center",
-                marginTop: -32, // floats above the bar
+                marginTop: -32,
                 borderWidth: 4,
                 borderColor: "#FFFFFF",
                 shadowColor: "#069594",
@@ -581,29 +661,24 @@ export default function DashboardScreen() {
             </Typography>
           </View>
         </View>
-
-        {/* Right two tabs: Orders, Profile */}
-        {NAV.slice(2).map((item) => {
-          const isActive = activeNav === item.id;
-          return (
-            <TouchableOpacity
-              key={item.id}
-              onPress={() => setActiveNav(item.id)}
-              activeOpacity={0.7}
-              style={{ flex: 1, alignItems: "center" }}
+        {NAV.slice(2).map((item) => (
+          <TouchableOpacity
+            key={item.id}
+            onPress={() => router.push(item.route as any)}
+            activeOpacity={0.7}
+            style={{ flex: 1, alignItems: "center" }}
+          >
+            {item.icon(false)}
+            <Typography
+              variant="body-small"
+              color="secondary"
+              className="mt-1"
+              style={{ fontSize: 10 }}
             >
-              {item.icon(isActive)}
-              <Typography
-                variant="body-small"
-                color={isActive ? "primary" : "secondary"}
-                className={`mt-1 ${isActive ? "font-bold" : ""}`}
-                style={{ fontSize: 10 }}
-              >
-                {item.label}
-              </Typography>
-            </TouchableOpacity>
-          );
-        })}
+              {item.label}
+            </Typography>
+          </TouchableOpacity>
+        ))}
       </View>
     </SafeAreaView>
   );

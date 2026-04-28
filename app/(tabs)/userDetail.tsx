@@ -4,11 +4,21 @@ import {
   ArrowRight,
   CalendarDays,
   Camera,
+  Check,
   ChevronDown,
   Plus,
+  X,
 } from "lucide-react-native";
-import React, { useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
+  ActivityIndicator,
+  Alert,
   Image,
   Platform,
   SafeAreaView,
@@ -21,13 +31,22 @@ import {
 import { Button } from "@/components/button/button";
 import { Input } from "@/components/inputs/input";
 import { Typography } from "@/components/typography/typography";
+import { ALLERGIES, CHRONIC_ILLNESSES } from "@/constants/medical-data";
+import { useAuth } from "@/context/auth-context";
+import { supabase } from "@/lib/supabase";
+import {
+  BottomSheetBackdrop,
+  BottomSheetModal,
+  BottomSheetScrollView,
+} from "@gorhom/bottom-sheet";
+import { useRouter } from "expo-router";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 type Gender = "Male" | "Female" | "Other";
 const GENDERS: Gender[] = ["Male", "Female", "Other"];
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 
-// ─── Label helper – enforces the global label contract ────────────────────────
+// ─── Label helper ────────────────────────
 const FieldLabel = ({ children }: { children: string }) => (
   <Typography
     variant="body"
@@ -39,7 +58,6 @@ const FieldLabel = ({ children }: { children: string }) => (
   </Typography>
 );
 
-// ─── Section wrapper – enforces the 20px (mb-5) vertical rhythm ───────────────
 const Section = ({
   children,
   last = false,
@@ -50,14 +68,60 @@ const Section = ({
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function ProfileDetails() {
-  const [fullName, setFullName]     = useState("");
-  const [dob, setDob]               = useState("");
-  const [gender, setGender]         = useState<Gender>("Male");
+  const { user } = useAuth();
+  const router = useRouter();
+
+  // Form State
+  const [fullName, setFullName] = useState("");
+  const [dob, setDob] = useState("");
+  const [gender, setGender] = useState<Gender>("Male");
   const [bloodGroup, setBloodGroup] = useState("");
-  const [height, setHeight]         = useState("");
-  const [weight, setWeight]         = useState("");
-  const [avatarUri, setAvatarUri]   = useState<string | null>(null);
+  const [height, setHeight] = useState("");
+  const [weight, setWeight] = useState("");
+  const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [showBloodPicker, setShowBloodPicker] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(true); // <-- Added loading state
+
+  // Medical Data State
+  const [allergies, setAllergies] = useState<string[]>([]);
+  const [illnesses, setIllnesses] = useState<string[]>([]);
+
+  // Bottom Sheet State
+  const bottomSheetModalRef = useRef<BottomSheetModal>(null);
+  const snapPoints = useMemo(() => ["80%"], []);
+
+  // ─── FETCH EXISTING DATA ──────────────────────────────────────────────────
+  useEffect(() => {
+    const fetchProfile = async () => {
+      if (!user) return;
+      try {
+        const { data, error } = await supabase
+          .from("family_members")
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("relationship", "Self")
+          .single();
+
+        if (data) {
+          setFullName(data.full_name || "");
+          setDob(data.dob || "");
+          setGender(data.gender || "Male");
+          setBloodGroup(data.blood_group || "");
+          setHeight(data.height || "");
+          setWeight(data.weight || "");
+          setAvatarUri(data.avatar_url || null);
+          setAllergies(data.allergies || []);
+          setIllnesses(data.chronic_illnesses || []);
+        }
+      } catch (err) {
+        // No existing profile found, it will just stay blank
+      } finally {
+        setInitialLoad(false);
+      }
+    };
+    fetchProfile();
+  }, [user]);
 
   /* ── helpers ── */
   const handleAvatarPick = async () => {
@@ -80,6 +144,133 @@ export default function ProfileDetails() {
     setDob(d);
   };
 
+  const handleSave = async () => {
+    if (!fullName || !dob) {
+      Alert.alert(
+        "Missing Info",
+        "Please enter at least your Name and Date of Birth.",
+      );
+      return;
+    }
+    if (!user) return;
+
+    setSaving(true);
+    try {
+      // 1. BULLETPROOF FIX: Guarantee the profile exists before we do anything else
+      const { error: profileCheckError } = await supabase
+        .from("profiles")
+        .upsert({ id: user.id }) // Creates it if it's missing!
+        .select()
+        .single();
+
+      if (profileCheckError)
+        console.log("Profile check note:", profileCheckError.message);
+
+      // 2. Check if the user ALREADY has an active family
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("active_family_id")
+        .eq("id", user.id)
+        .single();
+
+      let familyId = profile?.active_family_id;
+
+      // 3. If they don't have a family yet, create one
+      if (!familyId) {
+        const familyName = `${fullName.split(" ")[0]}'s Family`;
+        const { data: newFamily, error: familyError } = await supabase
+          .from("families")
+          .insert({ name: familyName, owner_id: user.id })
+          .select("id")
+          .single();
+
+        if (familyError) throw familyError;
+        familyId = newFamily.id;
+
+        // Update the profile to remember this family
+        await supabase
+          .from("profiles")
+          .update({ active_family_id: familyId })
+          .eq("id", user.id);
+      }
+
+      // 4. Check if their Personal Profile already exists in family_members
+      const { data: existingMember } = await supabase
+        .from("family_members")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("relationship", "Self")
+        .single();
+
+      // The Data we want to save
+      const memberData = {
+        family_id: familyId,
+        user_id: user.id,
+        relationship: "Self",
+        full_name: fullName,
+        gender,
+        dob,
+        blood_group: bloodGroup,
+        height,
+        weight,
+        allergies,
+        chronic_illnesses: illnesses,
+        avatar_url: avatarUri,
+      };
+
+      // 5. If they exist, UPDATE. If they don't, INSERT.
+      if (existingMember) {
+        const { error: updateError } = await supabase
+          .from("family_members")
+          .update(memberData)
+          .eq("id", existingMember.id);
+        if (updateError) throw updateError;
+        Alert.alert("Success", "Profile updated successfully!"); // <-- Let them know it saved!
+      } else {
+        const { error: insertError } = await supabase
+          .from("family_members")
+          .insert(memberData);
+        if (insertError) throw insertError;
+        router.replace("/(tabs)/familyCareDashboard"); // Only redirect if it's their first time
+      }
+    } catch (error: any) {
+      Alert.alert("Database Error", error.message);
+      console.error(error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Multi-Select Toggles
+  const toggleAllergy = (item: string) =>
+    setAllergies((prev) =>
+      prev.includes(item) ? prev.filter((i) => i !== item) : [...prev, item],
+    );
+  const toggleIllness = (item: string) =>
+    setIllnesses((prev) =>
+      prev.includes(item) ? prev.filter((i) => i !== item) : [...prev, item],
+    );
+
+  const renderBackdrop = useCallback(
+    (props: any) => (
+      <BottomSheetBackdrop
+        {...props}
+        disappearsOnIndex={-1}
+        appearsOnIndex={0}
+      />
+    ),
+    [],
+  );
+
+  // Show a quick loader while it fetches existing data so fields don't suddenly jump from empty to full
+  if (initialLoad) {
+    return (
+      <SafeAreaView className="flex-1 bg-white justify-center items-center">
+        <ActivityIndicator size="large" color="#069594" />
+      </SafeAreaView>
+    );
+  }
+
   /* ── render ── */
   return (
     <SafeAreaView
@@ -90,7 +281,7 @@ export default function ProfileDetails() {
     >
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-      {/* ── Back button — sits outside scroll so it never moves ── */}
+      {/* Back button */}
       <View className="px-6 pt-3 pb-1">
         <TouchableOpacity
           activeOpacity={0.7}
@@ -100,22 +291,17 @@ export default function ProfileDetails() {
         </TouchableOpacity>
       </View>
 
-      {/* ── Scrollable body — 24 px horizontal gutter, 40 px bottom pad ── */}
       <ScrollView
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{
-          paddingHorizontal: 24, // = px-6
+          paddingHorizontal: 24,
           paddingBottom: 40,
-          paddingTop: 16,        // = pt-4
+          paddingTop: 16,
         }}
       >
-
-        {/* ════════════════════════════════════════════════════════════════════
-            PROGRESS SECTION                                               mb-8
-            ════════════════════════════════════════════════════════════════════ */}
+        {/* Progress */}
         <View className="mb-8">
-          {/* Label row */}
           <View className="flex-row justify-between items-center">
             <Typography variant="body-small" color="secondary">
               Let's set up your profile · Step 1 of 3
@@ -128,8 +314,6 @@ export default function ProfileDetails() {
               33%
             </Typography>
           </View>
-
-          {/* Track + fill */}
           <View
             className="mt-2 rounded-full overflow-hidden"
             style={{ height: 6, backgroundColor: "#E5E7EB" }}
@@ -141,9 +325,7 @@ export default function ProfileDetails() {
           </View>
         </View>
 
-        {/* ════════════════════════════════════════════════════════════════════
-            PAGE HEADING                                                   mb-8
-            ════════════════════════════════════════════════════════════════════ */}
+        {/* Heading */}
         <View className="mb-8">
           <Typography variant="h2" color="heading" className="mb-1">
             Tell Us About You
@@ -153,16 +335,13 @@ export default function ProfileDetails() {
           </Typography>
         </View>
 
-        {/* ════════════════════════════════════════════════════════════════════
-            AVATAR UPLOAD                                                  mb-8
-            ════════════════════════════════════════════════════════════════════ */}
+        {/* Avatar Upload */}
         <View className="items-center mb-8">
           <TouchableOpacity
             onPress={handleAvatarPick}
             activeOpacity={0.85}
             style={{ position: "relative" }}
           >
-            {/* Dashed teal circle */}
             <View
               style={{
                 width: 96,
@@ -186,8 +365,6 @@ export default function ProfileDetails() {
                 <Camera size={30} color="#069594" strokeWidth={1.8} />
               )}
             </View>
-
-            {/* "+" badge — absolutely pinned to bottom-right of the circle */}
             <View
               className="absolute bg-primary rounded-full items-center justify-center"
               style={{
@@ -202,9 +379,11 @@ export default function ProfileDetails() {
               <Plus size={12} color="#FFFFFF" strokeWidth={3} />
             </View>
           </TouchableOpacity>
-
-          {/* Caption */}
-          <TouchableOpacity onPress={handleAvatarPick} activeOpacity={0.7} className="mt-3">
+          <TouchableOpacity
+            onPress={handleAvatarPick}
+            activeOpacity={0.7}
+            className="mt-3"
+          >
             <Typography
               variant="body-small"
               color="primary"
@@ -216,11 +395,7 @@ export default function ProfileDetails() {
           </TouchableOpacity>
         </View>
 
-        {/* ════════════════════════════════════════════════════════════════════
-            FORM FIELDS — 20 px (mb-5) vertical rhythm between each field
-            ════════════════════════════════════════════════════════════════════ */}
-
-        {/* Full Name */}
+        {/* FORM FIELDS */}
         <Section>
           <FieldLabel>Full Name</FieldLabel>
           <Input
@@ -231,7 +406,6 @@ export default function ProfileDetails() {
           />
         </Section>
 
-        {/* Date of Birth */}
         <Section>
           <FieldLabel>Date of Birth</FieldLabel>
           <Input
@@ -246,10 +420,8 @@ export default function ProfileDetails() {
           />
         </Section>
 
-        {/* Gender Selector */}
         <Section>
           <FieldLabel>Gender</FieldLabel>
-
           <View
             className="flex-row p-1 rounded-2xl"
             style={{
@@ -292,11 +464,8 @@ export default function ProfileDetails() {
           </View>
         </Section>
 
-        {/* Blood Group */}
         <Section>
           <FieldLabel>Blood Group</FieldLabel>
-
-          {/* Tap wraps a disabled Input to keep pill shape */}
           <TouchableOpacity
             onPress={() => setShowBloodPicker((v) => !v)}
             activeOpacity={0.85}
@@ -312,14 +481,14 @@ export default function ProfileDetails() {
                   color="#9CA3AF"
                   strokeWidth={2}
                   style={{
-                    transform: [{ rotate: showBloodPicker ? "180deg" : "0deg" }],
+                    transform: [
+                      { rotate: showBloodPicker ? "180deg" : "0deg" },
+                    ],
                   }}
                 />
               }
             />
           </TouchableOpacity>
-
-          {/* Inline dropdown — renders directly below, pushes layout down */}
           {showBloodPicker && (
             <View
               className="bg-white rounded-2xl overflow-hidden mt-1"
@@ -363,11 +532,8 @@ export default function ProfileDetails() {
           )}
         </Section>
 
-        {/* Height + Weight — side-by-side with gap-x-4 */}
         <Section>
           <View className="flex-row" style={{ gap: 16 }}>
-
-            {/* Height */}
             <View className="flex-1">
               <FieldLabel>Height</FieldLabel>
               <Input
@@ -379,8 +545,6 @@ export default function ProfileDetails() {
                 suffixText="cm"
               />
             </View>
-
-            {/* Weight */}
             <View className="flex-1">
               <FieldLabel>Weight</FieldLabel>
               <Input
@@ -395,12 +559,10 @@ export default function ProfileDetails() {
           </View>
         </Section>
 
-        {/* Known Allergies & Chronic Illnesses */}
         <Section last>
-          <FieldLabel>Known Allergies &amp; Chronic Illnesses</FieldLabel>
-
-          {/* Pill-shaped read trigger (multiline textarea-style) */}
+          <FieldLabel>Known Allergies & Chronic Illnesses</FieldLabel>
           <TouchableOpacity
+            onPress={() => bottomSheetModalRef.current?.present()}
             activeOpacity={0.85}
             className="bg-white rounded-2xl px-4 flex-row items-center justify-between"
             style={{
@@ -412,11 +574,12 @@ export default function ProfileDetails() {
           >
             <Typography
               variant="body"
-              color="muted"
+              color={allergies.length || illnesses.length ? "heading" : "muted"}
               className="flex-1 opacity-70"
-              style={{ flex: 1 }}
             >
-              e.g. Penicillin allergy, Type 2 Diabetes...
+              {allergies.length || illnesses.length
+                ? `${allergies.length + illnesses.length} selected`
+                : "e.g. Penicillin allergy, Type 2 Diabetes..."}
             </Typography>
             <ChevronDown
               size={18}
@@ -427,30 +590,134 @@ export default function ProfileDetails() {
           </TouchableOpacity>
         </Section>
 
-        {/* ════════════════════════════════════════════════════════════════════
-            FOOTER
-            ════════════════════════════════════════════════════════════════════ */}
+        {/* FOOTER */}
         <Button
-          title="Save & Continue"
+          title={saving ? "Saving..." : "Save & Continue"}
           variant="primary"
           rounded="full"
           size="lg"
           className="w-full mt-10"
+          disabled={saving}
           rightIcon={
-            <ArrowRight size={18} color="#FFFFFF" strokeWidth={2.5} />
+            !saving && (
+              <ArrowRight size={18} color="#FFFFFF" strokeWidth={2.5} />
+            )
           }
-          onPress={() => console.log("Save & Continue")}
+          onPress={handleSave}
         />
-
-        <View className="items-center mt-5">
-          <TouchableOpacity activeOpacity={0.7}>
-            <Typography variant="body" color="secondary">
-              Skip for now
-            </Typography>
-          </TouchableOpacity>
-        </View>
-
       </ScrollView>
+
+      {/* --- BOTTOM SHEET FOR MEDICAL DATA --- */}
+      <BottomSheetModal
+        ref={bottomSheetModalRef}
+        index={0}
+        snapPoints={snapPoints}
+        backdropComponent={renderBackdrop}
+        backgroundStyle={{ backgroundColor: "#fff", borderRadius: 24 }}
+      >
+        <View style={{ padding: 20, flex: 1 }}>
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 16,
+            }}
+          >
+            <Typography variant="h3" color="heading">
+              Medical Conditions
+            </Typography>
+            <TouchableOpacity
+              onPress={() => bottomSheetModalRef.current?.dismiss()}
+            >
+              <X size={24} color="#9CA3AF" />
+            </TouchableOpacity>
+          </View>
+
+          <BottomSheetScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 40 }}
+          >
+            {/* Allergies Section */}
+            <Typography
+              variant="subtitle"
+              color="heading"
+              className="mb-3 mt-2"
+            >
+              Allergies
+            </Typography>
+            <View style={{ gap: 10 }}>
+              {ALLERGIES.map((item) => {
+                const isSelected = allergies.includes(item);
+                return (
+                  <TouchableOpacity
+                    key={item}
+                    onPress={() => toggleAllergy(item)}
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      padding: 14,
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderColor: isSelected ? "#069594" : "#E5E7EB",
+                      backgroundColor: isSelected ? "#F0FAF9" : "#fff",
+                    }}
+                  >
+                    <Typography
+                      variant="body"
+                      color={isSelected ? "primary" : "heading"}
+                      className={isSelected ? "font-bold" : ""}
+                    >
+                      {item}
+                    </Typography>
+                    {isSelected && <Check size={18} color="#069594" />}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Illnesses Section */}
+            <Typography
+              variant="subtitle"
+              color="heading"
+              className="mb-3 mt-8"
+            >
+              Chronic Illnesses
+            </Typography>
+            <View style={{ gap: 10 }}>
+              {CHRONIC_ILLNESSES.map((item) => {
+                const isSelected = illnesses.includes(item);
+                return (
+                  <TouchableOpacity
+                    key={item}
+                    onPress={() => toggleIllness(item)}
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      padding: 14,
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderColor: isSelected ? "#069594" : "#E5E7EB",
+                      backgroundColor: isSelected ? "#F0FAF9" : "#fff",
+                    }}
+                  >
+                    <Typography
+                      variant="body"
+                      color={isSelected ? "primary" : "heading"}
+                      className={isSelected ? "font-bold" : ""}
+                    >
+                      {item}
+                    </Typography>
+                    {isSelected && <Check size={18} color="#069594" />}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </BottomSheetScrollView>
+        </View>
+      </BottomSheetModal>
     </SafeAreaView>
   );
 }

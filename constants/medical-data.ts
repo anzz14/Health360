@@ -1,0 +1,30 @@
+export const ALLERGIES = [
+  "Penicillin",
+  "Peanuts",
+  "Tree Nuts",
+  "Shellfish",
+  "Latex",
+  "Dust Mites",
+  "Pet Dander",
+  "Sulfa Drugs",
+  "Dairy",
+  "Soy",
+  "Gluten",
+  "Bee Stings",
+  "Pollen",
+];
+
+export const CHRONIC_ILLNESSES = [
+  "Type 1 Diabetes",
+  "Type 2 Diabetes",
+  "Hypertension (High Blood Pressure)",
+  "Asthma",
+  "Thyroid Disorder",
+  "Arthritis",
+  "Heart Disease",
+  "Epilepsy",
+  "Migraines",
+  "Autoimmune Disease",
+  "Chronic Kidney Disease",
+  "COPD",
+];
