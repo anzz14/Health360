@@ -29,18 +29,19 @@ import { useUserProfile } from "@/hooks/use-user-profile";
 // ─── Constants ────────────────────────────────────────────────────────────────
 type Gender = "Male" | "Female" | "Other";
 const GENDERS: Gender[] = ["Male", "Female", "Other"];
-const BLOOD_GROUPS = [
-  "A+",
-  "A-",
-  "B+",
-  "B-",
-  "AB+",
-  "AB-",
-  "O+",
-  "O-",
-] as const;
+const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] as const;
+type BloodGroup = (typeof BLOOD_GROUPS)[number] | "";
 
-// ─── Label helper – enforces the global label contract ────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface JoinRequest {
+  id?: string | number;
+  name?: string;
+  email?: string;
+  status?: string;
+  created_at?: string;
+}
+
+// ─── Label helper ─────────────────────────────────────────────────────────────
 const FieldLabel = ({ children }: { children: string }) => (
   <Typography
     variant="body"
@@ -52,7 +53,7 @@ const FieldLabel = ({ children }: { children: string }) => (
   </Typography>
 );
 
-// ─── Section wrapper – enforces the 20px (mb-5) vertical rhythm ───────────────
+// ─── Section wrapper ──────────────────────────────────────────────────────────
 const Section = ({
   children,
   last = false,
@@ -61,24 +62,103 @@ const Section = ({
   last?: boolean;
 }) => <View className={last ? "" : "mb-5"}>{children}</View>;
 
+// ─── Join Request Card ────────────────────────────────────────────────────────
+const JoinRequestCard = ({
+  req,
+  index,
+}: {
+  req: JoinRequest;
+  index: number;
+}) => {
+  const label = req.name ?? req.email ?? "Request #" + String(index + 1);
+  const status = req.status ?? "Pending";
+  const date = req.created_at
+    ? new Date(req.created_at).toLocaleDateString()
+    : null;
+
+  return (
+    <View
+      className="bg-white rounded-2xl px-4 py-3 mb-2"
+      style={{ borderWidth: 1, borderColor: "#E5E7EB" }}
+    >
+      <Typography variant="body-small" color="heading" className="font-bold">
+        {label}
+      </Typography>
+      <Typography variant="body-small" color="secondary">
+        {"Status: " + status}
+      </Typography>
+      {date ? (
+        <Typography variant="body-small" color="secondary">
+          {date}
+        </Typography>
+      ) : null}
+    </View>
+  );
+};
+
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function ProfileDetails() {
   const router = useRouter();
-  const { loadProfile, saveProfile, saving, loading } = useUserProfile();
+  const { loadProfile, saveProfile, saving } = useUserProfile();
 
   const [fullName, setFullName] = useState("");
   const [dob, setDob] = useState("");
   const [gender, setGender] = useState<Gender>("Male");
-  const [bloodGroup, setBloodGroup] = useState<
-    (typeof BLOOD_GROUPS)[number] | ""
-  >("");
+  const [bloodGroup, setBloodGroup] = useState<BloodGroup>("");
   const [height, setHeight] = useState("");
   const [weight, setWeight] = useState("");
   const [medicalNotes, setMedicalNotes] = useState("");
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [showBloodPicker, setShowBloodPicker] = useState(false);
+  const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
+  const [joinRequestsLoading, setJoinRequestsLoading] = useState(false);
 
-  // Load saved profile on mount
+ useEffect(() => {
+  const fetchJoinRequests = async () => {
+    setJoinRequestsLoading(true);
+
+    try {
+      const sessionString = localStorage.getItem(
+        "sb-vwpbjqqbxlqnkrmbidpr-auth-token"
+      );
+
+      if (!sessionString) throw new Error("No session found");
+
+      const session = JSON.parse(sessionString);
+
+      const accessToken = session?.access_token;
+
+      if (!accessToken) throw new Error("No access token");
+
+      const response = await fetch(
+        "https://vwpbjqqbxlqnkrmbidpr.supabase.co/rest/v1/join_requests?select=*",
+        {
+          headers: {
+            apikey:
+              process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "",
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!response.ok)
+        throw new Error("Failed to fetch join requests");
+
+      const data: JoinRequest[] = await response.json();
+
+      setJoinRequests(data);
+    } catch (error) {
+      console.error("Join requests fetch error:", error);
+    } finally {
+      setJoinRequestsLoading(false);
+    }
+  };
+
+  fetchJoinRequests();
+}, []);
+
+  // ── Load saved profile on mount ──
   useEffect(() => {
     const initializeProfile = async () => {
       const result = await loadProfile();
@@ -113,7 +193,9 @@ export default function ProfileDetails() {
   const formatDob = (text: string) => {
     const d = text.replace(/\D/g, "").slice(0, 8);
     if (d.length > 4)
-      return setDob(d.slice(0, 2) + " / " + d.slice(2, 4) + " / " + d.slice(4));
+      return setDob(
+        d.slice(0, 2) + " / " + d.slice(2, 4) + " / " + d.slice(4)
+      );
     if (d.length > 2) return setDob(d.slice(0, 2) + " / " + d.slice(2));
     setDob(d);
   };
@@ -122,7 +204,7 @@ export default function ProfileDetails() {
     if (!fullName || !dob) {
       Alert.alert(
         "Missing Info",
-        "Please enter at least your Name and Date of Birth.",
+        "Please enter at least your Name and Date of Birth."
       );
       return;
     }
@@ -146,17 +228,19 @@ export default function ProfileDetails() {
     router.replace("/(tabs)/familyInfo");
   };
 
+  // ── Safe top padding ──
+  const androidTopPadding =
+    Platform.OS === "android" ? (StatusBar.currentHeight ?? 0) : 0;
+
   /* ── render ── */
   return (
     <SafeAreaView
       className="flex-1 bg-white"
-      style={{
-        paddingTop: Platform.OS === "android" ? StatusBar.currentHeight : 0,
-      }}
+      style={{ paddingTop: androidTopPadding }}
     >
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-      {/* ── Back button — sits outside scroll so it never moves ── */}
+      {/* ── Back button ── */}
       <View className="px-6 pt-3 pb-1">
         <TouchableOpacity
           activeOpacity={0.7}
@@ -166,35 +250,31 @@ export default function ProfileDetails() {
         </TouchableOpacity>
       </View>
 
-      {/* ── Scrollable body — 24 px horizontal gutter, 40 px bottom pad ── */}
+      {/* ── Scrollable body ── */}
       <ScrollView
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{
-          paddingHorizontal: 24, // = px-6
+          paddingHorizontal: 24,
           paddingBottom: 40,
-          paddingTop: 16, // = pt-4
+          paddingTop: 16,
         }}
       >
-        {/* ════════════════════════════════════════════════════════════════════
-            PROGRESS SECTION                                               mb-8
-            ════════════════════════════════════════════════════════════════════ */}
+        {/* ── Progress ── */}
         <View className="mb-8">
-          {/* Label row */}
           <View className="flex-row justify-between items-center">
             <Typography variant="body-small" color="secondary">
-              Let's set up your profile · Step 1 of 3
+              {"Let's set up your profile · Step 1 of 3"}
             </Typography>
             <Typography
               variant="body-small"
               color="primary"
               className="font-bold"
             >
-              33%
+              {"33%"}
             </Typography>
           </View>
 
-          {/* Track + fill */}
           <View
             className="mt-2 rounded-full overflow-hidden"
             style={{ height: 6, backgroundColor: "#E5E7EB" }}
@@ -206,28 +286,43 @@ export default function ProfileDetails() {
           </View>
         </View>
 
-        {/* ════════════════════════════════════════════════════════════════════
-            PAGE HEADING                                                   mb-8
-            ════════════════════════════════════════════════════════════════════ */}
+        {/* ── Heading ── */}
         <View className="mb-8">
           <Typography variant="h2" color="heading" className="mb-1">
-            Tell Us About You
+            {"Tell Us About You"}
           </Typography>
           <Typography variant="body" color="secondary">
-            This helps doctors and labs serve you better
+            {"This helps doctors and labs serve you better"}
           </Typography>
         </View>
 
-        {/* ════════════════════════════════════════════════════════════════════
-            AVATAR UPLOAD                                                  mb-8
-            ════════════════════════════════════════════════════════════════════ */}
+        {/* ── Join Requests ── */}
+        {joinRequestsLoading ? (
+          <View className="mb-8">
+            <Typography variant="body-small" color="secondary">
+              {"Loading join requests..."}
+            </Typography>
+          </View>
+        ) : joinRequests.length > 0 ? (
+          <View className="mb-8">
+            <FieldLabel>Join Requests</FieldLabel>
+            {joinRequests.map((req, index) => (
+              <JoinRequestCard
+                key={req.id ? String(req.id) : String(index)}
+                req={req}
+                index={index}
+              />
+            ))}
+          </View>
+        ) : null}
+
+        {/* ── Avatar ── */}
         <View className="items-center mb-8">
           <TouchableOpacity
             onPress={handleAvatarPick}
             activeOpacity={0.85}
             style={{ position: "relative" }}
           >
-            {/* Dashed teal circle */}
             <View
               style={{
                 width: 96,
@@ -252,7 +347,6 @@ export default function ProfileDetails() {
               )}
             </View>
 
-            {/* "+" badge — absolutely pinned to bottom-right of the circle */}
             <View
               className="absolute bg-primary rounded-full items-center justify-center"
               style={{
@@ -268,7 +362,6 @@ export default function ProfileDetails() {
             </View>
           </TouchableOpacity>
 
-          {/* Caption */}
           <TouchableOpacity
             onPress={handleAvatarPick}
             activeOpacity={0.7}
@@ -280,16 +373,12 @@ export default function ProfileDetails() {
               className="font-bold text-center"
               style={{ letterSpacing: 1.3 }}
             >
-              ADD YOUR PHOTO
+              {"ADD YOUR PHOTO"}
             </Typography>
           </TouchableOpacity>
         </View>
 
-        {/* ════════════════════════════════════════════════════════════════════
-            FORM FIELDS — 20 px (mb-5) vertical rhythm between each field
-            ════════════════════════════════════════════════════════════════════ */}
-
-        {/* Full Name */}
+        {/* ── Full Name ── */}
         <Section>
           <FieldLabel>Full Name</FieldLabel>
           <Input
@@ -300,7 +389,7 @@ export default function ProfileDetails() {
           />
         </Section>
 
-        {/* Date of Birth */}
+        {/* ── Date of Birth ── */}
         <Section>
           <FieldLabel>Date of Birth</FieldLabel>
           <Input
@@ -315,10 +404,9 @@ export default function ProfileDetails() {
           />
         </Section>
 
-        {/* Gender Selector */}
+        {/* ── Gender ── */}
         <Section>
           <FieldLabel>Gender</FieldLabel>
-
           <View
             className="flex-row p-1 rounded-2xl"
             style={{
@@ -361,11 +449,9 @@ export default function ProfileDetails() {
           </View>
         </Section>
 
-        {/* Blood Group */}
+        {/* ── Blood Group ── */}
         <Section>
           <FieldLabel>Blood Group</FieldLabel>
-
-          {/* Tap wraps a disabled Input to keep pill shape */}
           <TouchableOpacity
             onPress={() => setShowBloodPicker((v) => !v)}
             activeOpacity={0.85}
@@ -390,7 +476,6 @@ export default function ProfileDetails() {
             />
           </TouchableOpacity>
 
-          {/* Inline dropdown — renders directly below, pushes layout down */}
           {showBloodPicker && (
             <View
               className="bg-white rounded-2xl overflow-hidden mt-1"
@@ -434,10 +519,9 @@ export default function ProfileDetails() {
           )}
         </Section>
 
-        {/* Height + Weight — side-by-side with gap-x-4 */}
+        {/* ── Height + Weight ── */}
         <Section>
           <View className="flex-row" style={{ gap: 16 }}>
-            {/* Height */}
             <View className="flex-1">
               <FieldLabel>Height</FieldLabel>
               <Input
@@ -449,8 +533,6 @@ export default function ProfileDetails() {
                 suffixText="cm"
               />
             </View>
-
-            {/* Weight */}
             <View className="flex-1">
               <FieldLabel>Weight</FieldLabel>
               <Input
@@ -465,10 +547,9 @@ export default function ProfileDetails() {
           </View>
         </Section>
 
-        {/* Known Allergies & Chronic Illnesses */}
+        {/* ── Medical Notes ── */}
         <Section last>
           <FieldLabel>Known Allergies &amp; Chronic Illnesses</FieldLabel>
-
           <View
             className="bg-white rounded-2xl px-4"
             style={{
@@ -494,9 +575,7 @@ export default function ProfileDetails() {
           </View>
         </Section>
 
-        {/* ════════════════════════════════════════════════════════════════════
-            FOOTER
-            ════════════════════════════════════════════════════════════════════ */}
+        {/* ── Footer ── */}
         <Button
           title={saving ? "Saving..." : "Save & Continue"}
           variant="primary"
@@ -511,7 +590,7 @@ export default function ProfileDetails() {
         <View className="items-center mt-5">
           <TouchableOpacity activeOpacity={0.7}>
             <Typography variant="body" color="secondary">
-              Skip for now
+              {"Skip for now"}
             </Typography>
           </TouchableOpacity>
         </View>
