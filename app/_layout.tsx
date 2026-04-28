@@ -1,11 +1,12 @@
 import {
-    DarkTheme,
-    DefaultTheme,
-    ThemeProvider,
+  DarkTheme,
+  DefaultTheme,
+  ThemeProvider,
 } from "@react-navigation/native";
 
 import { AuthProvider, useAuth } from "@/context/auth-context";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
@@ -14,16 +15,16 @@ import "react-native-reanimated";
 import "./global.css";
 
 import {
-    Inter_100Thin,
-    Inter_200ExtraLight,
-    Inter_300Light,
-    Inter_400Regular,
-    Inter_500Medium,
-    Inter_600SemiBold,
-    Inter_700Bold,
-    Inter_800ExtraBold,
-    Inter_900Black,
-    useFonts,
+  Inter_100Thin,
+  Inter_200ExtraLight,
+  Inter_300Light,
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+  Inter_700Bold,
+  Inter_800ExtraBold,
+  Inter_900Black,
+  useFonts,
 } from "@expo-google-fonts/inter";
 
 export const unstable_settings = {
@@ -84,10 +85,14 @@ export default function RootLayout() {
 
   return (
     <AuthProvider>
-      <ThemeProvider value={colorScheme === "light" ? DarkTheme : DefaultTheme}>
-        <RootNavigator />
-        <StatusBar style="auto" />
-      </ThemeProvider>
+      <BottomSheetModalProvider>
+        <ThemeProvider
+          value={colorScheme === "light" ? DarkTheme : DefaultTheme}
+        >
+          <RootNavigator />
+          <StatusBar style="auto" />
+        </ThemeProvider>
+      </BottomSheetModalProvider>
     </AuthProvider>
   );
 }

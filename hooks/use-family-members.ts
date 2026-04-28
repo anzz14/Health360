@@ -16,13 +16,10 @@ export type FamilyMember = {
 
 export function useFamilyMembers() {
   const [members, setMembers] = useState<FamilyMember[]>([]);
+  const [familyId, setFamilyId] = useState<string>("");
   const [inviteCode, setInviteCode] = useState("");
   const [familyName, setFamilyName] = useState("");
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchData();
-  }, []);
 
   const fetchData = async () => {
     setLoading(true);
@@ -44,6 +41,7 @@ export function useFamilyMembers() {
       return;
     }
 
+    setFamilyId(family.id);
     setInviteCode(family.invite_code);
     setFamilyName(family.name);
 
@@ -98,7 +96,18 @@ export function useFamilyMembers() {
     setLoading(false);
   };
 
-  return { members, inviteCode, familyName, loading, refresh: fetchData };
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  return {
+    members,
+    familyId,
+    inviteCode,
+    familyName,
+    loading,
+    refetch: fetchData,
+  };
 }
 
 // Helper to convert "YYYY-MM-DD" into an age number
