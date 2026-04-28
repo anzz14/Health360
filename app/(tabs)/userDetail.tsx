@@ -1,4 +1,5 @@
 import * as ImagePicker from "expo-image-picker";
+import { useRouter } from "expo-router";
 import {
   ArrowLeft,
   ArrowRight,
@@ -7,13 +8,15 @@ import {
   ChevronDown,
   Plus,
 } from "lucide-react-native";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
+  Alert,
   Image,
   Platform,
   SafeAreaView,
   ScrollView,
   StatusBar,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -21,11 +24,21 @@ import {
 import { Button } from "@/components/button/button";
 import { Input } from "@/components/inputs/input";
 import { Typography } from "@/components/typography/typography";
+import { useUserProfile } from "@/hooks/use-user-profile";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 type Gender = "Male" | "Female" | "Other";
 const GENDERS: Gender[] = ["Male", "Female", "Other"];
-const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
+const BLOOD_GROUPS = [
+  "A+",
+  "A-",
+  "B+",
+  "B-",
+  "AB+",
+  "AB-",
+  "O+",
+  "O-",
+] as const;
 
 // ─── Label helper – enforces the global label contract ────────────────────────
 const FieldLabel = ({ children }: { children: string }) => (
@@ -50,14 +63,39 @@ const Section = ({
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function ProfileDetails() {
-  const [fullName, setFullName]     = useState("");
-  const [dob, setDob]               = useState("");
-  const [gender, setGender]         = useState<Gender>("Male");
-  const [bloodGroup, setBloodGroup] = useState("");
-  const [height, setHeight]         = useState("");
-  const [weight, setWeight]         = useState("");
-  const [avatarUri, setAvatarUri]   = useState<string | null>(null);
+  const router = useRouter();
+  const { loadProfile, saveProfile, saving, loading } = useUserProfile();
+
+  const [fullName, setFullName] = useState("");
+  const [dob, setDob] = useState("");
+  const [gender, setGender] = useState<Gender>("Male");
+  const [bloodGroup, setBloodGroup] = useState<
+    (typeof BLOOD_GROUPS)[number] | ""
+  >("");
+  const [height, setHeight] = useState("");
+  const [weight, setWeight] = useState("");
+  const [medicalNotes, setMedicalNotes] = useState("");
+  const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [showBloodPicker, setShowBloodPicker] = useState(false);
+
+  // Load saved profile on mount
+  useEffect(() => {
+    const initializeProfile = async () => {
+      const result = await loadProfile();
+      if (result.success && result.data) {
+        setFullName(result.data.fullName);
+        setDob(result.data.dob);
+        setGender(result.data.gender);
+        setBloodGroup(result.data.bloodGroup);
+        setHeight(result.data.height);
+        setWeight(result.data.weight);
+        setMedicalNotes(result.data.medicalNotes);
+        setAvatarUri(result.data.avatarUrl);
+      }
+    };
+
+    initializeProfile();
+  }, [loadProfile]);
 
   /* ── helpers ── */
   const handleAvatarPick = async () => {
@@ -78,6 +116,34 @@ export default function ProfileDetails() {
       return setDob(d.slice(0, 2) + " / " + d.slice(2, 4) + " / " + d.slice(4));
     if (d.length > 2) return setDob(d.slice(0, 2) + " / " + d.slice(2));
     setDob(d);
+  };
+
+  const handleSave = async () => {
+    if (!fullName || !dob) {
+      Alert.alert(
+        "Missing Info",
+        "Please enter at least your Name and Date of Birth.",
+      );
+      return;
+    }
+
+    const result = await saveProfile({
+      fullName,
+      dob,
+      gender,
+      bloodGroup,
+      height,
+      weight,
+      medicalNotes,
+      avatarUrl: avatarUri,
+    });
+
+    if (!result.success) {
+      Alert.alert("Database Error", result.error || "Failed to save profile");
+      return;
+    }
+
+    router.replace("/(tabs)/familyInfo");
   };
 
   /* ── render ── */
@@ -107,10 +173,9 @@ export default function ProfileDetails() {
         contentContainerStyle={{
           paddingHorizontal: 24, // = px-6
           paddingBottom: 40,
-          paddingTop: 16,        // = pt-4
+          paddingTop: 16, // = pt-4
         }}
       >
-
         {/* ════════════════════════════════════════════════════════════════════
             PROGRESS SECTION                                               mb-8
             ════════════════════════════════════════════════════════════════════ */}
@@ -204,7 +269,11 @@ export default function ProfileDetails() {
           </TouchableOpacity>
 
           {/* Caption */}
-          <TouchableOpacity onPress={handleAvatarPick} activeOpacity={0.7} className="mt-3">
+          <TouchableOpacity
+            onPress={handleAvatarPick}
+            activeOpacity={0.7}
+            className="mt-3"
+          >
             <Typography
               variant="body-small"
               color="primary"
@@ -312,7 +381,9 @@ export default function ProfileDetails() {
                   color="#9CA3AF"
                   strokeWidth={2}
                   style={{
-                    transform: [{ rotate: showBloodPicker ? "180deg" : "0deg" }],
+                    transform: [
+                      { rotate: showBloodPicker ? "180deg" : "0deg" },
+                    ],
                   }}
                 />
               }
@@ -366,7 +437,6 @@ export default function ProfileDetails() {
         {/* Height + Weight — side-by-side with gap-x-4 */}
         <Section>
           <View className="flex-row" style={{ gap: 16 }}>
-
             {/* Height */}
             <View className="flex-1">
               <FieldLabel>Height</FieldLabel>
@@ -399,47 +469,43 @@ export default function ProfileDetails() {
         <Section last>
           <FieldLabel>Known Allergies &amp; Chronic Illnesses</FieldLabel>
 
-          {/* Pill-shaped read trigger (multiline textarea-style) */}
-          <TouchableOpacity
-            activeOpacity={0.85}
-            className="bg-white rounded-2xl px-4 flex-row items-center justify-between"
+          <View
+            className="bg-white rounded-2xl px-4"
             style={{
               borderWidth: 1,
               borderColor: "#E5E7EB",
-              minHeight: 56,
-              paddingVertical: 14,
+              minHeight: 96,
+              paddingVertical: 10,
             }}
           >
-            <Typography
-              variant="body"
-              color="muted"
-              className="flex-1 opacity-70"
-              style={{ flex: 1 }}
-            >
-              e.g. Penicillin allergy, Type 2 Diabetes...
-            </Typography>
-            <ChevronDown
-              size={18}
-              color="#9CA3AF"
-              strokeWidth={2}
-              style={{ flexShrink: 0, marginLeft: 8 }}
+            <TextInput
+              value={medicalNotes}
+              onChangeText={setMedicalNotes}
+              placeholder="e.g. Penicillin allergy, Type 2 Diabetes..."
+              placeholderTextColor="#9CA3AF"
+              multiline
+              style={{
+                minHeight: 76,
+                textAlignVertical: "top",
+                color: "#111827",
+                fontSize: 14,
+              }}
             />
-          </TouchableOpacity>
+          </View>
         </Section>
 
         {/* ════════════════════════════════════════════════════════════════════
             FOOTER
             ════════════════════════════════════════════════════════════════════ */}
         <Button
-          title="Save & Continue"
+          title={saving ? "Saving..." : "Save & Continue"}
           variant="primary"
           rounded="full"
           size="lg"
           className="w-full mt-10"
-          rightIcon={
-            <ArrowRight size={18} color="#FFFFFF" strokeWidth={2.5} />
-          }
-          onPress={() => console.log("Save & Continue")}
+          disabled={saving}
+          rightIcon={<ArrowRight size={18} color="#FFFFFF" strokeWidth={2.5} />}
+          onPress={handleSave}
         />
 
         <View className="items-center mt-5">
@@ -449,7 +515,6 @@ export default function ProfileDetails() {
             </Typography>
           </TouchableOpacity>
         </View>
-
       </ScrollView>
     </SafeAreaView>
   );

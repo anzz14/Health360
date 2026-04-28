@@ -1,8 +1,11 @@
+import { Typography } from "@/components/typography/typography";
+import { FamilyMember, useFamilyMembers } from "@/hooks/use-family-members";
 import {
   ArrowLeft,
   BriefcaseMedical,
   CalendarDays,
   ChevronRight,
+  Copy,
   FileText,
   Folder,
   Home,
@@ -12,6 +15,7 @@ import {
 } from "lucide-react-native";
 import React, { useState } from "react";
 import {
+  ActivityIndicator,
   Image,
   Platform,
   SafeAreaView,
@@ -20,81 +24,46 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { Typography } from "@/components/typography/typography";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-type FamilyMember = {
-  id: string;
-  name: string;
-  relation: string;
-  age: number;
-  bloodGroup: string;
-  lastConsult: string;
-  records: number;
-  avatar: string;
-  bloodColor: string;
-  bloodBg: string;
-};
-
-// ─── Static Data ──────────────────────────────────────────────────────────────
-const MEMBERS: FamilyMember[] = [
-  {
-    id: "1",
-    name: "Rajesh Sharma",
-    relation: "Self",
-    age: 42,
-    bloodGroup: "O+",
-    lastConsult: "Oct 12",
-    records: 15,
-    avatar: "https://i.pravatar.cc/150?img=12",
-    bloodColor: "#DC2626",
-    bloodBg: "#FEF2F2",
-  },
-  {
-    id: "2",
-    name: "Sunita Sharma",
-    relation: "Wife",
-    age: 39,
-    bloodGroup: "B+",
-    lastConsult: "Sep 28",
-    records: 8,
-    avatar: "https://i.pravatar.cc/150?img=47",
-    bloodColor: "#DC2626",
-    bloodBg: "#FEF2F2",
-  },
-  {
-    id: "3",
-    name: "Rohan Sharma",
-    relation: "Son",
-    age: 8,
-    bloodGroup: "B+",
-    lastConsult: "Aug 15",
-    records: 12,
-    avatar: "https://i.pravatar.cc/150?img=30",
-    bloodColor: "#DC2626",
-    bloodBg: "#FEF2F2",
-  },
-  {
-    id: "4",
-    name: "Priya Sharma",
-    relation: "Daughter",
-    age: 4,
-    bloodGroup: "B+",
-    lastConsult: "Oct 05",
-    records: 4,
-    avatar: "https://i.pravatar.cc/150?img=44",
-    bloodColor: "#DC2626",
-    bloodBg: "#FEF2F2",
-  },
-];
 
 // ─── Nav items ────────────────────────────────────────────────────────────────
-type NavItem = { id: string; label: string; icon: (a: boolean) => React.ReactNode };
+type NavItem = {
+  id: string;
+  label: string;
+  icon: (a: boolean) => React.ReactNode;
+};
 const NAV: NavItem[] = [
-  { id: "home",    label: "Home",    icon: (a) => <Home     size={22} color={a ? "#069594" : "#9CA3AF"} strokeWidth={2} /> },
-  { id: "records", label: "Records", icon: (a) => <FileText size={22} color={a ? "#069594" : "#9CA3AF"} strokeWidth={2} /> },
-  { id: "orders",  label: "Orders",  icon: (a) => <ShoppingCart size={22} color={a ? "#069594" : "#9CA3AF"} strokeWidth={2} /> },
-  { id: "profile", label: "Profile", icon: (a) => <User     size={22} color={a ? "#069594" : "#9CA3AF"} strokeWidth={2} /> },
+  {
+    id: "home",
+    label: "Home",
+    icon: (a) => (
+      <Home size={22} color={a ? "#069594" : "#9CA3AF"} strokeWidth={2} />
+    ),
+  },
+  {
+    id: "records",
+    label: "Records",
+    icon: (a) => (
+      <FileText size={22} color={a ? "#069594" : "#9CA3AF"} strokeWidth={2} />
+    ),
+  },
+  {
+    id: "orders",
+    label: "Orders",
+    icon: (a) => (
+      <ShoppingCart
+        size={22}
+        color={a ? "#069594" : "#9CA3AF"}
+        strokeWidth={2}
+      />
+    ),
+  },
+  {
+    id: "profile",
+    label: "Profile",
+    icon: (a) => (
+      <User size={22} color={a ? "#069594" : "#9CA3AF"} strokeWidth={2} />
+    ),
+  },
 ];
 
 // ─── Member Card ─────────────────────────────────────────────────────────────
@@ -113,9 +82,7 @@ const MemberCard = ({ member }: { member: FamilyMember }) => (
       elevation: 3,
     }}
   >
-    {/* ── Top row: avatar | info | chevron ── */}
     <View style={{ flexDirection: "row", alignItems: "center" }}>
-      {/* Avatar */}
       <View
         style={{
           width: 52,
@@ -131,18 +98,28 @@ const MemberCard = ({ member }: { member: FamilyMember }) => (
         />
       </View>
 
-      {/* Name + meta */}
       <View style={{ flex: 1, marginLeft: 14 }}>
-        <Typography variant="body" color="heading" className="font-bold" style={{ fontSize: 17 }}>
+        <Typography
+          variant="body"
+          color="heading"
+          className="font-bold"
+          style={{ fontSize: 17 }}
+        >
           {member.name}
         </Typography>
 
-        <View style={{ flexDirection: "row", alignItems: "center", marginTop: 4, gap: 8 }}>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            marginTop: 4,
+            gap: 8,
+          }}
+        >
           <Typography variant="body-small" color="secondary">
             {member.relation} · {member.age} yrs
           </Typography>
 
-          {/* Blood group badge */}
           <View
             style={{
               backgroundColor: member.bloodBg,
@@ -161,12 +138,9 @@ const MemberCard = ({ member }: { member: FamilyMember }) => (
           </View>
         </View>
       </View>
-
-      {/* Chevron */}
       <ChevronRight size={20} color="#CBD5E1" strokeWidth={2} />
     </View>
 
-    {/* ── Divider ── */}
     <View
       style={{
         height: 1,
@@ -176,20 +150,31 @@ const MemberCard = ({ member }: { member: FamilyMember }) => (
       }}
     />
 
-    {/* ── Bottom row: last consult | records ── */}
-    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-      {/* Last consult */}
+    <View
+      style={{
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+      }}
+    >
       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
         <CalendarDays size={14} color="#9CA3AF" strokeWidth={1.8} />
-        <Typography variant="body-small" color="secondary" style={{ fontSize: 12 }}>
+        <Typography
+          variant="body-small"
+          color="secondary"
+          style={{ fontSize: 12 }}
+        >
           Last consult: {member.lastConsult}
         </Typography>
       </View>
 
-      {/* Records */}
       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
         <Folder size={14} color="#9CA3AF" strokeWidth={1.8} />
-        <Typography variant="body-small" color="secondary" style={{ fontSize: 12 }}>
+        <Typography
+          variant="body-small"
+          color="secondary"
+          style={{ fontSize: 12 }}
+        >
           {member.records} Records
         </Typography>
       </View>
@@ -201,6 +186,9 @@ const MemberCard = ({ member }: { member: FamilyMember }) => (
 export default function ManageFamilyScreen() {
   const [activeNav, setActiveNav] = useState("home");
 
+  // Use the hook to fetch the joined data & invite code!
+  const { members, inviteCode, familyName, loading } = useFamilyMembers();
+
   return (
     <SafeAreaView
       style={{
@@ -211,7 +199,7 @@ export default function ManageFamilyScreen() {
     >
       <StatusBar barStyle="dark-content" backgroundColor="#F2F5F7" />
 
-      {/* ── Header (outside scroll so it stays pinned) ── */}
+      {/* ── Header ── */}
       <View
         style={{
           flexDirection: "row",
@@ -235,63 +223,134 @@ export default function ManageFamilyScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
           paddingHorizontal: 24,
-          paddingTop: 8,
+          paddingTop: 16,
           paddingBottom: 130, // clears FAB + nav bar
         }}
       >
-        {/* Subtitle */}
-        <Typography variant="body" color="secondary" className="mb-6">
-          4 members in The Sharma Family
-        </Typography>
+        {loading ? (
+          <ActivityIndicator
+            size="large"
+            color="#069594"
+            style={{ marginTop: 40 }}
+          />
+        ) : (
+          <>
+            {/* ── INVITE CODE BANNER ── */}
+            {inviteCode ? (
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  backgroundColor: "#E0F4F4",
+                  padding: 16,
+                  borderRadius: 16,
+                  marginBottom: 24,
+                  borderWidth: 1,
+                  borderColor: "#A3D6D5",
+                }}
+              >
+                <View>
+                  <Typography
+                    variant="body-small"
+                    color="primary"
+                    className="font-bold mb-1 uppercase tracking-wider"
+                  >
+                    Family Invite Code
+                  </Typography>
+                  <Typography
+                    variant="h3"
+                    color="heading"
+                    style={{ letterSpacing: 2 }}
+                  >
+                    {inviteCode}
+                  </Typography>
+                </View>
 
-        {/* Member cards */}
-        {MEMBERS.map((m) => (
-          <MemberCard key={m.id} member={m} />
-        ))}
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  style={{
+                    backgroundColor: "#069594",
+                    paddingHorizontal: 14,
+                    paddingVertical: 10,
+                    borderRadius: 10,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                  onPress={() => {
+                    // Optional: Add clipboard logic here
+                    console.log("Copied:", inviteCode);
+                  }}
+                >
+                  <Copy size={16} color="#FFFFFF" />
+                  <Typography
+                    variant="body-small"
+                    color="white"
+                    className="font-bold"
+                  >
+                    Copy
+                  </Typography>
+                </TouchableOpacity>
+              </View>
+            ) : null}
 
-        {/* ── Add New Member ── */}
-        <TouchableOpacity
-          activeOpacity={0.8}
-          style={{
-            borderWidth: 2,
-            borderStyle: "dashed",
-            borderColor: "#A3D6D5",
-            backgroundColor: "#F4FAFA",
-            borderRadius: 20,
-            paddingVertical: 28,
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          {/* Teal circle with + */}
-          <View
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: 9999,
-              backgroundColor: "#069594",
-              alignItems: "center",
-              justifyContent: "center",
-              marginBottom: 10,
-              shadowColor: "#069594",
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.28,
-              shadowRadius: 8,
-              elevation: 5,
-            }}
-          >
-            <Plus size={22} color="#FFFFFF" strokeWidth={2.5} />
-          </View>
+            {/* Subtitle */}
+            <Typography
+              variant="body"
+              color="secondary"
+              className="mb-6 font-medium"
+            >
+              {members.length} members in {familyName || "your family"}
+            </Typography>
 
-          <Typography variant="body" color="primary" className="font-bold">
-            + Add New Member
-          </Typography>
-        </TouchableOpacity>
+            {/* Member cards */}
+            {members.map((m) => (
+              <MemberCard key={m.id} member={m} />
+            ))}
+
+            {/* ── Add New Member ── */}
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={{
+                borderWidth: 2,
+                borderStyle: "dashed",
+                borderColor: "#A3D6D5",
+                backgroundColor: "#F4FAFA",
+                borderRadius: 20,
+                paddingVertical: 28,
+                alignItems: "center",
+                justifyContent: "center",
+                marginTop: 10,
+              }}
+            >
+              <View
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 9999,
+                  backgroundColor: "#069594",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginBottom: 10,
+                  shadowColor: "#069594",
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.28,
+                  shadowRadius: 8,
+                  elevation: 5,
+                }}
+              >
+                <Plus size={22} color="#FFFFFF" strokeWidth={2.5} />
+              </View>
+              <Typography variant="body" color="primary" className="font-bold">
+                + Add New Member
+              </Typography>
+            </TouchableOpacity>
+          </>
+        )}
       </ScrollView>
 
-      {/* ════════════════════════════════════════════════════════════════════
-          BOTTOM NAVIGATION
-          ════════════════════════════════════════════════════════════════════ */}
+      {/* ── BOTTOM NAVIGATION ── */}
       <View
         style={{
           position: "absolute",
@@ -313,7 +372,6 @@ export default function ManageFamilyScreen() {
           zIndex: 50,
         }}
       >
-        {/* Left pair: Home, Records */}
         {NAV.slice(0, 2).map((item) => {
           const active = activeNav === item.id;
           return (
@@ -336,7 +394,6 @@ export default function ManageFamilyScreen() {
           );
         })}
 
-        {/* Centre slot — FAB floats above */}
         <View style={{ flex: 1, alignItems: "center" }}>
           <TouchableOpacity
             activeOpacity={0.85}
@@ -347,7 +404,7 @@ export default function ManageFamilyScreen() {
               backgroundColor: "#069594",
               alignItems: "center",
               justifyContent: "center",
-              marginTop: -30,           // floats above the nav bar
+              marginTop: -30,
               borderWidth: 4,
               borderColor: "#FFFFFF",
               shadowColor: "#069594",
@@ -369,7 +426,6 @@ export default function ManageFamilyScreen() {
           </Typography>
         </View>
 
-        {/* Right pair: Orders, Profile */}
         {NAV.slice(2).map((item) => {
           const active = activeNav === item.id;
           return (
