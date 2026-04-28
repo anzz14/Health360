@@ -1,5 +1,7 @@
+import { AddMemberBottomSheet } from "@/components/add-member-bottom-sheet";
 import { Typography } from "@/components/typography/typography";
 import { FamilyMember, useFamilyMembers } from "@/hooks/use-family-members";
+import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import {
   ArrowLeft,
   BriefcaseMedical,
@@ -13,7 +15,7 @@ import {
   ShoppingCart,
   User,
 } from "lucide-react-native";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -185,9 +187,22 @@ const MemberCard = ({ member }: { member: FamilyMember }) => (
 // ─── Screen ───────────────────────────────────────────────────────────────────
 export default function ManageFamilyScreen() {
   const [activeNav, setActiveNav] = useState("home");
+  const bottomSheetRef = useRef<BottomSheetModal>(null);
 
   // Use the hook to fetch the joined data & invite code!
-  const { members, inviteCode, familyName, loading } = useFamilyMembers();
+  const { members, familyId, inviteCode, familyName, loading, refetch } =
+    useFamilyMembers();
+
+  const handleAddMemberPress = () => {
+    if (bottomSheetRef.current) {
+      bottomSheetRef.current.present();
+    }
+  };
+
+  const handleMemberAdded = async () => {
+    // Refetch the members list to show the newly added member
+    await refetch();
+  };
 
   return (
     <SafeAreaView
@@ -311,6 +326,7 @@ export default function ManageFamilyScreen() {
 
             {/* ── Add New Member ── */}
             <TouchableOpacity
+              onPress={handleAddMemberPress}
               activeOpacity={0.8}
               style={{
                 borderWidth: 2,
@@ -448,6 +464,12 @@ export default function ManageFamilyScreen() {
           );
         })}
       </View>
+
+      <AddMemberBottomSheet
+        ref={bottomSheetRef}
+        familyId={familyId}
+        onMemberAdded={handleMemberAdded}
+      />
     </SafeAreaView>
   );
 }
