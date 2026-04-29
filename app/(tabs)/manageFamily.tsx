@@ -1,6 +1,7 @@
 import { AddMemberBottomSheet } from "@/components/add-member-bottom-sheet";
 import { Typography } from "@/components/typography/typography";
 import { FamilyMember, useFamilyMembers } from "@/hooks/use-family-members";
+import { supabase } from "@/lib/supabase";
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import {
   ArrowLeft,
@@ -15,7 +16,7 @@ import {
   ShoppingCart,
   User,
 } from "lucide-react-native";
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -27,12 +28,22 @@ import {
   View,
 } from "react-native";
 
+type JoinRequest = {
+  id: string;
+  family_id: string;
+  requester_name: string;
+  status: "pending" | "approved" | "rejected";
+  created_at: string;
+};
+
 // ─── Nav items ────────────────────────────────────────────────────────────────
 type NavItem = {
   id: string;
   label: string;
   icon: (a: boolean) => React.ReactNode;
 };
+
+
 const NAV: NavItem[] = [
   {
     id: "home",
@@ -184,14 +195,139 @@ const MemberCard = ({ member }: { member: FamilyMember }) => (
   </TouchableOpacity>
 );
 
+const JoinRequestCard = ({ request }: { request: JoinRequest }) => {
+  const statusColor =
+    request.status === "approved"
+      ? "#15803D"
+      : request.status === "rejected"
+        ? "#B91C1C"
+        : "#B45309";
+  const statusBg =
+    request.status === "approved"
+      ? "#DCFCE7"
+      : request.status === "rejected"
+        ? "#FEE2E2"
+        : "#FEF3C7";
+
+  return (
+    <View
+      style={{
+        backgroundColor: "#FFFFFF",
+        borderRadius: 20,
+        padding: 16,
+        marginBottom: 14,
+        borderWidth: 1,
+        borderColor: "#E5E7EB",
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
+      }}
+    >
+      <View style={{ flexDirection: "row", alignItems: "center" }}>
+        <View
+          style={{
+            width: 48,
+            height: 48,
+            borderRadius: 9999,
+            backgroundColor: "#E0F4F4",
+            alignItems: "center",
+            justifyContent: "center",
+            marginRight: 14,
+          }}
+        >
+          <User size={22} color="#069594" strokeWidth={2.2} />
+        </View>
+
+        <View style={{ flex: 1 }}>
+          <Typography
+            variant="body"
+            color="heading"
+            className="font-bold"
+            style={{ fontSize: 16 }}
+          >
+            {request.requester_name || "Unknown requester"}
+          </Typography>
+          <Typography variant="body-small" color="secondary" className="mt-1">
+            Sent a join request
+          </Typography>
+        </View>
+
+        <View
+          style={{
+            backgroundColor: statusBg,
+            paddingHorizontal: 10,
+            paddingVertical: 5,
+            borderRadius: 9999,
+          }}
+        >
+          <Typography
+            variant="body-small"
+            className="font-bold capitalize"
+            style={{ color: statusColor, fontSize: 11 }}
+          >
+            {request.status}
+          </Typography>
+        </View>
+      </View>
+
+      <View
+        style={{
+          height: 1,
+          backgroundColor: "#E5E7EB",
+          marginVertical: 12,
+          width: "100%",
+        }}
+      />
+
+      <Typography variant="body-small" color="secondary">
+        Requested on {new Date(request.created_at).toLocaleDateString()}
+      </Typography>
+    </View>
+  );
+};
+
 // ─── Screen ───────────────────────────────────────────────────────────────────
 export default function ManageFamilyScreen() {
   const [activeNav, setActiveNav] = useState("home");
+  const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
+  const [requestsLoading, setRequestsLoading] = useState(true);
   const bottomSheetRef = useRef<BottomSheetModal>(null);
 
   // Use the hook to fetch the joined data & invite code!
   const { members, familyId, inviteCode, familyName, loading, refetch } =
     useFamilyMembers();
+
+  useEffect(() => {
+    const fetchJoinRequests = async () => {
+      if (!familyId) {
+        setJoinRequests([]);
+        setRequestsLoading(false);
+        return;
+      }
+
+      setRequestsLoading(true);
+
+      const { data, error } = await supabase
+        .from("join_requests")
+        .select("id,family_id,requester_name,status,created_at")
+        .eq("family_id", familyId)
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("Failed to fetch join requests", error);
+        setJoinRequests([]);
+        setRequestsLoading(false);
+        return;
+      }
+
+      setJoinRequests((data as JoinRequest[]) || []);
+      setRequestsLoading(false);
+    };
+
+    fetchJoinRequests();
+  }, [familyId]);
 
   const handleAddMemberPress = () => {
     if (bottomSheetRef.current) {
@@ -309,6 +445,53 @@ export default function ManageFamilyScreen() {
                 </TouchableOpacity>
               </View>
             ) : null}
+
+            {/* Join Requests */}
+            <View style={{ marginBottom: 6 }}>
+              <Typography
+                variant="body-small"
+                color="primary"
+                className="font-bold mb-2 uppercase tracking-wider"
+              >
+                Join Requests
+              </Typography>
+
+              {requestsLoading ? (
+                <View
+                  style={{
+                    backgroundColor: "#FFFFFF",
+                    borderRadius: 18,
+                    padding: 16,
+                    borderWidth: 1,
+                    borderColor: "#E5E7EB",
+                    marginBottom: 18,
+                  }}
+                >
+                  <Typography variant="body-small" color="secondary">
+                    Loading requests...
+                  </Typography>
+                </View>
+              ) : joinRequests.length > 0 ? (
+                joinRequests.map((request) => (
+                  <JoinRequestCard key={request.id} request={request} />
+                ))
+              ) : (
+                <View
+                  style={{
+                    backgroundColor: "#FFFFFF",
+                    borderRadius: 18,
+                    padding: 16,
+                    borderWidth: 1,
+                    borderColor: "#E5E7EB",
+                    marginBottom: 18,
+                  }}
+                >
+                  <Typography variant="body-small" color="secondary">
+                    No pending join requests right now.
+                  </Typography>
+                </View>
+              )}
+            </View>
 
             {/* Subtitle */}
             <Typography

@@ -10,7 +10,7 @@ import {
   GitFork,
   ShieldCheck,
 } from "lucide-react-native";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   Image,
@@ -23,10 +23,28 @@ import {
   View,
 } from "react-native";
 
+import { supabase } from "@/lib/supabase";
+
 const FAMILY_ILLUSTRATION =
   "https://res.cloudinary.com/dt5qoqw6u/image/upload/v1776014783/a5c4cd72-2dc1-4105-90eb-4e2759a83471_pccwuo.png";
 
 export default function FamilySetupScreen() {
+useEffect(() => {
+  const fetchUser = async () => {
+    const { data, error } = await supabase
+  .from("join_requests")
+  .insert({
+    family_id: "a5daa450-a6f5-4bae-b542-5a71b7d675db",
+    user_id: "9622e623-00a1-427d-83dd-0836f6249d74",
+    status: "pending",
+    mapped_member_id: "36e2f278-4061-4736-9279-7bdfe7caff69",
+    requester_name: "Anas"
+  })
+  };
+
+  fetchUser();
+}, []);
+
   const router = useRouter();
   const { user } = useAuth();
   const { createFamily, saving } = useFamilySetup();

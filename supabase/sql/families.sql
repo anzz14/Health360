@@ -196,3 +196,59 @@ CREATE INDEX IF NOT EXISTS idx_families_admin_user_id ON public.families(admin_u
 CREATE INDEX IF NOT EXISTS idx_family_members_family_id ON public.family_members(family_id);
 CREATE INDEX IF NOT EXISTS idx_family_members_user_id ON public.family_members(user_id);
 CREATE INDEX IF NOT EXISTS idx_families_invite_code ON public.families(invite_code);
+
+-- 9) Aggregated family dashboard payload for the current admin user
+CREATE OR REPLACE FUNCTION public.get_family_dashboard_data()
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  family_record JSONB;
+  member_records JSONB;
+BEGIN
+  SELECT jsonb_build_object(
+    'id', f.id,
+    'name', f.name,
+    'invite_code', f.invite_code
+  )
+  INTO family_record
+  FROM public.families f
+  WHERE f.admin_user_id = auth.uid()
+  ORDER BY f.created_at DESC
+  LIMIT 1;
+
+  IF family_record IS NULL THEN
+    RETURN jsonb_build_object(
+      'family', NULL,
+      'members', '[]'::jsonb
+    );
+  END IF;
+
+  SELECT COALESCE(
+    jsonb_agg(
+      jsonb_build_object(
+        'id', m.id,
+        'full_name', m.full_name,
+        'relation', m.relation,
+        'dob', COALESCE(up.dob, m.dob),
+        'blood_group', COALESCE(up.blood_group::text, m.blood_group),
+        'avatar_url', COALESCE(up.avatar_url, m.avatar_url)
+      )
+      ORDER BY m.created_at
+    ),
+    '[]'::jsonb
+  )
+  INTO member_records
+  FROM public.family_members m
+  LEFT JOIN public.user_profiles up
+    ON up.id = m.user_id
+  WHERE m.family_id = (family_record->>'id')::uuid;
+
+  RETURN jsonb_build_object(
+    'family', family_record,
+    'members', member_records
+  );
+END;
+$$;

@@ -7,6 +7,7 @@ import {
   Camera,
   ChevronDown,
   Plus,
+  Users,
 } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
@@ -24,83 +25,51 @@ import {
 import { Button } from "@/components/button/button";
 import { Input } from "@/components/inputs/input";
 import { Typography } from "@/components/typography/typography";
+import { supabase } from "@/lib/supabase";
 import { useUserProfile } from "@/hooks/use-user-profile";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
 type Gender = "Male" | "Female" | "Other";
 const GENDERS: Gender[] = ["Male", "Female", "Other"];
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] as const;
 type BloodGroup = (typeof BLOOD_GROUPS)[number] | "";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
 interface JoinRequest {
-  id?: string | number;
-  name?: string;
-  email?: string;
-  status?: string;
-  created_at?: string;
+  id: string;
+  family_id: string;
+  status: "pending" | "approved" | "rejected";
+  created_at: string;
+  families?: { name: string };
 }
 
-// ─── Label helper ─────────────────────────────────────────────────────────────
 const FieldLabel = ({ children }: { children: string }) => (
-  <Typography
-    variant="body"
-    color="heading"
-    className="font-bold mb-2 ml-1 uppercase"
-    style={{ letterSpacing: 0.4 }}
-  >
+  <Typography variant="body" color="heading" className="font-bold mb-2 ml-1 uppercase" style={{ letterSpacing: 0.4 }}>
     {children}
   </Typography>
 );
 
-// ─── Section wrapper ──────────────────────────────────────────────────────────
-const Section = ({
-  children,
-  last = false,
-}: {
-  children: React.ReactNode;
-  last?: boolean;
-}) => <View className={last ? "" : "mb-5"}>{children}</View>;
+const Section = ({ children, last = false }: { children: React.ReactNode; last?: boolean }) => (
+  <View className={last ? "" : "mb-5"}>{children}</View>
+);
 
-// ─── Join Request Card ────────────────────────────────────────────────────────
-const JoinRequestCard = ({
-  req,
-  index,
-}: {
-  req: JoinRequest;
-  index: number;
-}) => {
-  const label = req.name ?? req.email ?? "Request #" + String(index + 1);
-  const status = req.status ?? "Pending";
-  const date = req.created_at
-    ? new Date(req.created_at).toLocaleDateString()
-    : null;
+const JoinRequestCard = ({ req }: { req: JoinRequest }) => (
+  <View className="bg-white rounded-2xl px-4 py-3 mb-2" style={{ borderWidth: 1, borderColor: "#E5E7EB" }}>
+    <Typography variant="body-small" color="heading" className="font-bold">
+      {req.families?.name || "Family"}
+    </Typography>
+    <Typography variant="body-small" color="secondary">
+      Status: {req.status}
+    </Typography>
+    <Typography variant="body-small" color="secondary">
+      {new Date(req.created_at).toLocaleDateString()}
+    </Typography>
+  </View>
+);
 
-  return (
-    <View
-      className="bg-white rounded-2xl px-4 py-3 mb-2"
-      style={{ borderWidth: 1, borderColor: "#E5E7EB" }}
-    >
-      <Typography variant="body-small" color="heading" className="font-bold">
-        {label}
-      </Typography>
-      <Typography variant="body-small" color="secondary">
-        {"Status: " + status}
-      </Typography>
-      {date ? (
-        <Typography variant="body-small" color="secondary">
-          {date}
-        </Typography>
-      ) : null}
-    </View>
-  );
-};
-
-// ─── Component ────────────────────────────────────────────────────────────────
 export default function ProfileDetails() {
   const router = useRouter();
   const { loadProfile, saveProfile, saving } = useUserProfile();
 
+  // Profile state
   const [fullName, setFullName] = useState("");
   const [dob, setDob] = useState("");
   const [gender, setGender] = useState<Gender>("Male");
@@ -110,55 +79,16 @@ export default function ProfileDetails() {
   const [medicalNotes, setMedicalNotes] = useState("");
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [showBloodPicker, setShowBloodPicker] = useState(false);
+
+  // Join request state
+  const [inviteCode, setInviteCode] = useState("");
+  const [joinLoading, setJoinLoading] = useState(false);
+  const [joinMessage, setJoinMessage] = useState("");
+  const [joinMessageIsError, setJoinMessageIsError] = useState(false);
   const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
   const [joinRequestsLoading, setJoinRequestsLoading] = useState(false);
 
- useEffect(() => {
-  const fetchJoinRequests = async () => {
-    setJoinRequestsLoading(true);
-
-    try {
-      const sessionString = localStorage.getItem(
-        "sb-vwpbjqqbxlqnkrmbidpr-auth-token"
-      );
-
-      if (!sessionString) throw new Error("No session found");
-
-      const session = JSON.parse(sessionString);
-
-      const accessToken = session?.access_token;
-
-      if (!accessToken) throw new Error("No access token");
-
-      const response = await fetch(
-        "https://vwpbjqqbxlqnkrmbidpr.supabase.co/rest/v1/join_requests?select=*",
-        {
-          headers: {
-            apikey:
-              process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "",
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      if (!response.ok)
-        throw new Error("Failed to fetch join requests");
-
-      const data: JoinRequest[] = await response.json();
-
-      setJoinRequests(data);
-    } catch (error) {
-      console.error("Join requests fetch error:", error);
-    } finally {
-      setJoinRequestsLoading(false);
-    }
-  };
-
-  fetchJoinRequests();
-}, []);
-
-  // ── Load saved profile on mount ──
+  // Load profile on mount
   useEffect(() => {
     const initializeProfile = async () => {
       const result = await loadProfile();
@@ -173,11 +103,42 @@ export default function ProfileDetails() {
         setAvatarUri(result.data.avatarUrl);
       }
     };
-
     initializeProfile();
   }, [loadProfile]);
 
-  /* ── helpers ── */
+
+    const fetchRequest = async (inviteCode: string) => {
+      const {data, error} = await supabase.auth.getUser()
+
+      if(!data.user) {
+        console.error("Failed to fetch user", error);
+        return 
+      }
+
+       const { data: families, error: famError } = await supabase
+      .from("families")
+      .select("id")
+      .eq('invite_code', inviteCode)
+      .maybeSingle()
+
+    if(!families?.id) {
+      console.error('Invalid Family Code', error)
+      return
+    }
+    console.log('Sent To request to family id', families?.id)
+
+    const {data: familyMember, error: memberError} = await supabase
+    .from('join_requests')
+    .insert({
+        family_id: families.id,
+        user_id: data.user.id,
+        status: "pending",
+        mapped_member_id: "36e2f278-4061-4736-9279-7bdfe7caff69",
+        requester_name: "Ayan"
+      })
+    }
+
+
   const handleAvatarPick = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") return;
@@ -192,23 +153,16 @@ export default function ProfileDetails() {
 
   const formatDob = (text: string) => {
     const d = text.replace(/\D/g, "").slice(0, 8);
-    if (d.length > 4)
-      return setDob(
-        d.slice(0, 2) + " / " + d.slice(2, 4) + " / " + d.slice(4)
-      );
+    if (d.length > 4) return setDob(d.slice(0, 2) + " / " + d.slice(2, 4) + " / " + d.slice(4));
     if (d.length > 2) return setDob(d.slice(0, 2) + " / " + d.slice(2));
     setDob(d);
   };
 
   const handleSave = async () => {
     if (!fullName || !dob) {
-      Alert.alert(
-        "Missing Info",
-        "Please enter at least your Name and Date of Birth."
-      );
+      Alert.alert("Missing Info", "Please enter at least your Name and Date of Birth.");
       return;
     }
-
     const result = await saveProfile({
       fullName,
       dob,
@@ -219,379 +173,184 @@ export default function ProfileDetails() {
       medicalNotes,
       avatarUrl: avatarUri,
     });
-
     if (!result.success) {
       Alert.alert("Database Error", result.error || "Failed to save profile");
       return;
     }
-
     router.replace("/(tabs)/familyInfo");
   };
 
-  // ── Safe top padding ──
-  const androidTopPadding =
-    Platform.OS === "android" ? (StatusBar.currentHeight ?? 0) : 0;
-
-  /* ── render ── */
   return (
-    <SafeAreaView
-      className="flex-1 bg-white"
-      style={{ paddingTop: androidTopPadding }}
-    >
+    <SafeAreaView className="flex-1 bg-white" style={{ paddingTop: Platform.OS === "android" ? StatusBar.currentHeight : 0 }}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-
-      {/* ── Back button ── */}
       <View className="px-6 pt-3 pb-1">
-        <TouchableOpacity
-          activeOpacity={0.7}
-          className="w-9 h-9 items-center justify-center"
-        >
+        <TouchableOpacity activeOpacity={0.7} className="w-9 h-9 items-center justify-center">
           <ArrowLeft size={20} color="#374151" strokeWidth={2.2} />
         </TouchableOpacity>
       </View>
 
-      {/* ── Scrollable body ── */}
       <ScrollView
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{
-          paddingHorizontal: 24,
-          paddingBottom: 40,
-          paddingTop: 16,
-        }}
+        contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 40, paddingTop: 16 }}
       >
-        {/* ── Progress ── */}
+        {/* Progress */}
         <View className="mb-8">
           <View className="flex-row justify-between items-center">
-            <Typography variant="body-small" color="secondary">
-              {"Let's set up your profile · Step 1 of 3"}
-            </Typography>
-            <Typography
-              variant="body-small"
-              color="primary"
-              className="font-bold"
-            >
-              {"33%"}
-            </Typography>
+            <Typography variant="body-small" color="secondary">Let's set up your profile · Step 1 of 3</Typography>
+            <Typography variant="body-small" color="primary" className="font-bold">33%</Typography>
           </View>
-
-          <View
-            className="mt-2 rounded-full overflow-hidden"
-            style={{ height: 6, backgroundColor: "#E5E7EB" }}
-          >
-            <View
-              className="bg-primary rounded-full"
-              style={{ width: "33%", height: 6 }}
-            />
+          <View className="mt-2 rounded-full overflow-hidden" style={{ height: 6, backgroundColor: "#E5E7EB" }}>
+            <View className="bg-primary rounded-full" style={{ width: "33%", height: 6 }} />
           </View>
         </View>
 
-        {/* ── Heading ── */}
+        {/* Heading */}
         <View className="mb-8">
-          <Typography variant="h2" color="heading" className="mb-1">
-            {"Tell Us About You"}
-          </Typography>
-          <Typography variant="body" color="secondary">
-            {"This helps doctors and labs serve you better"}
-          </Typography>
+          <Typography variant="h2" color="heading" className="mb-1">Tell Us About You</Typography>
+          <Typography variant="body" color="secondary">This helps doctors and labs serve you better</Typography>
         </View>
 
-        {/* ── Join Requests ── */}
-        {joinRequestsLoading ? (
-          <View className="mb-8">
-            <Typography variant="body-small" color="secondary">
-              {"Loading join requests..."}
-            </Typography>
+        {/* Join a Family */}
+        <Section>
+          <View className="bg-white rounded-2xl px-4 py-4" style={{ borderWidth: 1, borderColor: "#E5E7EB" }}>
+            <View className="flex-row items-center mb-3" style={{ gap: 8 }}>
+              <Users size={18} color="#069594" strokeWidth={2} />
+              <Typography variant="body" color="heading" className="font-bold">Join a Family</Typography>
+            </View>
+            <Input
+              placeholder="Enter invite code (e.g., SHARMA-X7B9A)"
+              value={inviteCode}
+              onChangeText={(text) => {
+                setInviteCode(text);
+                if (joinMessage) { setJoinMessage(""); setJoinMessageIsError(false); }
+              }}
+              autoCapitalize="characters"
+              autoCorrect={false}
+            />
+            <TouchableOpacity
+      
+            onPress={() => fetchRequest(inviteCode)}
+              disabled={joinLoading || !inviteCode.trim()}
+              activeOpacity={0.85}
+              className="mt-3 rounded-2xl items-center justify-center"
+              style={{ backgroundColor: joinLoading || !inviteCode.trim() ? "#D1FAF8" : "#069594", paddingVertical: 12 }}
+            >
+              <Typography variant="body-small" color="white" className="font-bold" style={{ letterSpacing: 0.5 }}>
+                {joinLoading ? "Sending..." : "Send Join Request"}
+              </Typography>
+            </TouchableOpacity>
+            {joinMessage ? (
+              <Typography variant="body-small" color={joinMessageIsError ? "error" : "primary"} className="mt-2 text-center">
+                {joinMessage}
+              </Typography>
+            ) : null}
           </View>
+        </Section>
+
+        {/* Existing Join Requests */}
+        {joinRequestsLoading ? (
+          <View className="mb-5"><Typography variant="body-small" color="secondary">Loading join requests...</Typography></View>
         ) : joinRequests.length > 0 ? (
-          <View className="mb-8">
+          <View className="mb-5">
             <FieldLabel>Join Requests</FieldLabel>
-            {joinRequests.map((req, index) => (
-              <JoinRequestCard
-                key={req.id ? String(req.id) : String(index)}
-                req={req}
-                index={index}
-              />
+            {joinRequests.map((req) => (
+              <JoinRequestCard key={req.id} req={req} />
             ))}
           </View>
         ) : null}
 
-        {/* ── Avatar ── */}
+        {/* Avatar */}
         <View className="items-center mb-8">
-          <TouchableOpacity
-            onPress={handleAvatarPick}
-            activeOpacity={0.85}
-            style={{ position: "relative" }}
-          >
-            <View
-              style={{
-                width: 96,
-                height: 96,
-                borderRadius: 9999,
-                borderWidth: 2,
-                borderColor: "#069594",
-                borderStyle: "dashed",
-                backgroundColor: "#F5F7FA",
-                alignItems: "center",
-                justifyContent: "center",
-                overflow: "hidden",
-              }}
-            >
+          <TouchableOpacity onPress={handleAvatarPick} activeOpacity={0.85} style={{ position: "relative" }}>
+            <View style={{ width: 96, height: 96, borderRadius: 9999, borderWidth: 2, borderColor: "#069594", borderStyle: "dashed", backgroundColor: "#F5F7FA", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
               {avatarUri ? (
-                <Image
-                  source={{ uri: avatarUri }}
-                  style={{ width: 96, height: 96, borderRadius: 9999 }}
-                />
+                <Image source={{ uri: avatarUri }} style={{ width: 96, height: 96, borderRadius: 9999 }} />
               ) : (
                 <Camera size={30} color="#069594" strokeWidth={1.8} />
               )}
             </View>
-
-            <View
-              className="absolute bg-primary rounded-full items-center justify-center"
-              style={{
-                width: 22,
-                height: 22,
-                bottom: 2,
-                right: 2,
-                borderWidth: 2,
-                borderColor: "#FFFFFF",
-              }}
-            >
+            <View className="absolute bg-primary rounded-full items-center justify-center" style={{ width: 22, height: 22, bottom: 2, right: 2, borderWidth: 2, borderColor: "#FFFFFF" }}>
               <Plus size={12} color="#FFFFFF" strokeWidth={3} />
             </View>
           </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={handleAvatarPick}
-            activeOpacity={0.7}
-            className="mt-3"
-          >
-            <Typography
-              variant="body-small"
-              color="primary"
-              className="font-bold text-center"
-              style={{ letterSpacing: 1.3 }}
-            >
-              {"ADD YOUR PHOTO"}
+          <TouchableOpacity onPress={handleAvatarPick} activeOpacity={0.7} className="mt-3">
+            <Typography variant="body-small" color="primary" className="font-bold text-center" style={{ letterSpacing: 1.3 }}>
+              ADD YOUR PHOTO
             </Typography>
           </TouchableOpacity>
         </View>
 
-        {/* ── Full Name ── */}
+        {/* Full Name */}
         <Section>
           <FieldLabel>Full Name</FieldLabel>
-          <Input
-            placeholder="Enter name"
-            value={fullName}
-            onChangeText={setFullName}
-            autoCapitalize="words"
-          />
+          <Input placeholder="Enter name" value={fullName} onChangeText={setFullName} autoCapitalize="words" />
         </Section>
 
-        {/* ── Date of Birth ── */}
+        {/* Date of Birth */}
         <Section>
           <FieldLabel>Date of Birth</FieldLabel>
-          <Input
-            placeholder="DD / MM / YYYY"
-            value={dob}
-            onChangeText={formatDob}
-            keyboardType="number-pad"
-            maxLength={14}
-            suffix={
-              <CalendarDays size={20} color="#6B7280" strokeWidth={1.8} />
-            }
-          />
+          <Input placeholder="DD / MM / YYYY" value={dob} onChangeText={formatDob} keyboardType="number-pad" maxLength={14} suffix={<CalendarDays size={20} color="#6B7280" strokeWidth={1.8} />} />
         </Section>
 
-        {/* ── Gender ── */}
+        {/* Gender */}
         <Section>
           <FieldLabel>Gender</FieldLabel>
-          <View
-            className="flex-row p-1 rounded-2xl"
-            style={{
-              backgroundColor: "#F9FAFB",
-              borderWidth: 1,
-              borderColor: "#E5E7EB",
-            }}
-          >
+          <View className="flex-row p-1 rounded-2xl" style={{ backgroundColor: "#F9FAFB", borderWidth: 1, borderColor: "#E5E7EB" }}>
             {GENDERS.map((g) => {
               const isActive = gender === g;
               return (
-                <TouchableOpacity
-                  key={g}
-                  onPress={() => setGender(g)}
-                  activeOpacity={0.8}
-                  className="flex-1 items-center py-3 rounded-xl"
-                  style={
-                    isActive
-                      ? {
-                          backgroundColor: "#069594",
-                          shadowColor: "#069594",
-                          shadowOffset: { width: 0, height: 2 },
-                          shadowOpacity: 0.25,
-                          shadowRadius: 4,
-                          elevation: 3,
-                        }
-                      : { backgroundColor: "transparent" }
-                  }
-                >
-                  <Typography
-                    variant="body-small"
-                    color={isActive ? "white" : "heading"}
-                    className={isActive ? "font-bold" : "font-medium"}
-                  >
-                    {g}
-                  </Typography>
+                <TouchableOpacity key={g} onPress={() => setGender(g)} activeOpacity={0.8} className="flex-1 items-center py-3 rounded-xl" style={isActive ? { backgroundColor: "#069594", shadowColor: "#069594", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4, elevation: 3 } : { backgroundColor: "transparent" }}>
+                  <Typography variant="body-small" color={isActive ? "white" : "heading"} className={isActive ? "font-bold" : "font-medium"}>{g}</Typography>
                 </TouchableOpacity>
               );
             })}
           </View>
         </Section>
 
-        {/* ── Blood Group ── */}
+        {/* Blood Group */}
         <Section>
           <FieldLabel>Blood Group</FieldLabel>
-          <TouchableOpacity
-            onPress={() => setShowBloodPicker((v) => !v)}
-            activeOpacity={0.85}
-          >
-            <Input
-              placeholder="Select"
-              value={bloodGroup}
-              editable={false}
-              pointerEvents="none"
-              suffix={
-                <ChevronDown
-                  size={18}
-                  color="#9CA3AF"
-                  strokeWidth={2}
-                  style={{
-                    transform: [
-                      { rotate: showBloodPicker ? "180deg" : "0deg" },
-                    ],
-                  }}
-                />
-              }
-            />
+          <TouchableOpacity onPress={() => setShowBloodPicker((v) => !v)} activeOpacity={0.85}>
+            <Input placeholder="Select" value={bloodGroup} editable={false} pointerEvents="none" suffix={<ChevronDown size={18} color="#9CA3AF" strokeWidth={2} style={{ transform: [{ rotate: showBloodPicker ? "180deg" : "0deg" }] }} />} />
           </TouchableOpacity>
-
           {showBloodPicker && (
-            <View
-              className="bg-white rounded-2xl overflow-hidden mt-1"
-              style={{
-                borderWidth: 1,
-                borderColor: "#E5E7EB",
-                shadowColor: "#000",
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.07,
-                shadowRadius: 8,
-                elevation: 6,
-              }}
-            >
+            <View className="bg-white rounded-2xl overflow-hidden mt-1" style={{ borderWidth: 1, borderColor: "#E5E7EB", shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 6 }}>
               {BLOOD_GROUPS.map((bg, i) => (
-                <TouchableOpacity
-                  key={bg}
-                  onPress={() => {
-                    setBloodGroup(bg);
-                    setShowBloodPicker(false);
-                  }}
-                  activeOpacity={0.7}
-                  style={{
-                    paddingVertical: 11,
-                    paddingHorizontal: 16,
-                    backgroundColor:
-                      bloodGroup === bg ? "rgba(6,149,148,0.08)" : "#FFFFFF",
-                    borderBottomWidth: i < BLOOD_GROUPS.length - 1 ? 1 : 0,
-                    borderBottomColor: "#F3F4F6",
-                  }}
-                >
-                  <Typography
-                    variant="body-small"
-                    color={bloodGroup === bg ? "primary" : "default"}
-                    className={bloodGroup === bg ? "font-bold" : ""}
-                  >
-                    {bg}
-                  </Typography>
+                <TouchableOpacity key={bg} onPress={() => { setBloodGroup(bg); setShowBloodPicker(false); }} activeOpacity={0.7} style={{ paddingVertical: 11, paddingHorizontal: 16, backgroundColor: bloodGroup === bg ? "rgba(6,149,148,0.08)" : "#FFFFFF", borderBottomWidth: i < BLOOD_GROUPS.length - 1 ? 1 : 0, borderBottomColor: "#F3F4F6" }}>
+                  <Typography variant="body-small" color={bloodGroup === bg ? "primary" : "default"} className={bloodGroup === bg ? "font-bold" : ""}>{bg}</Typography>
                 </TouchableOpacity>
               ))}
             </View>
           )}
         </Section>
 
-        {/* ── Height + Weight ── */}
+        {/* Height + Weight */}
         <Section>
           <View className="flex-row" style={{ gap: 16 }}>
             <View className="flex-1">
               <FieldLabel>Height</FieldLabel>
-              <Input
-                placeholder="175"
-                value={height}
-                onChangeText={setHeight}
-                keyboardType="numeric"
-                maxLength={5}
-                suffixText="cm"
-              />
+              <Input placeholder="175" value={height} onChangeText={setHeight} keyboardType="numeric" maxLength={5} suffixText="cm" />
             </View>
             <View className="flex-1">
               <FieldLabel>Weight</FieldLabel>
-              <Input
-                placeholder="70"
-                value={weight}
-                onChangeText={setWeight}
-                keyboardType="numeric"
-                maxLength={5}
-                suffixText="kg"
-              />
+              <Input placeholder="70" value={weight} onChangeText={setWeight} keyboardType="numeric" maxLength={5} suffixText="kg" />
             </View>
           </View>
         </Section>
 
-        {/* ── Medical Notes ── */}
+        {/* Medical Notes */}
         <Section last>
           <FieldLabel>Known Allergies &amp; Chronic Illnesses</FieldLabel>
-          <View
-            className="bg-white rounded-2xl px-4"
-            style={{
-              borderWidth: 1,
-              borderColor: "#E5E7EB",
-              minHeight: 96,
-              paddingVertical: 10,
-            }}
-          >
-            <TextInput
-              value={medicalNotes}
-              onChangeText={setMedicalNotes}
-              placeholder="e.g. Penicillin allergy, Type 2 Diabetes..."
-              placeholderTextColor="#9CA3AF"
-              multiline
-              style={{
-                minHeight: 76,
-                textAlignVertical: "top",
-                color: "#111827",
-                fontSize: 14,
-              }}
-            />
+          <View className="bg-white rounded-2xl px-4" style={{ borderWidth: 1, borderColor: "#E5E7EB", minHeight: 96, paddingVertical: 10 }}>
+            <TextInput value={medicalNotes} onChangeText={setMedicalNotes} placeholder="e.g. Penicillin allergy, Type 2 Diabetes..." placeholderTextColor="#9CA3AF" multiline style={{ minHeight: 76, textAlignVertical: "top", color: "#111827", fontSize: 14 }} />
           </View>
         </Section>
 
-        {/* ── Footer ── */}
-        <Button
-          title={saving ? "Saving..." : "Save & Continue"}
-          variant="primary"
-          rounded="full"
-          size="lg"
-          className="w-full mt-10"
-          disabled={saving}
-          rightIcon={<ArrowRight size={18} color="#FFFFFF" strokeWidth={2.5} />}
-          onPress={handleSave}
-        />
-
+        <Button title={saving ? "Saving..." : "Save & Continue"} variant="primary" rounded="full" size="lg" className="w-full mt-10" disabled={saving} rightIcon={<ArrowRight size={18} color="#FFFFFF" strokeWidth={2.5} />} onPress={handleSave} />
         <View className="items-center mt-5">
           <TouchableOpacity activeOpacity={0.7}>
-            <Typography variant="body" color="secondary">
-              {"Skip for now"}
-            </Typography>
+            <Typography variant="body" color="secondary">Skip for now</Typography>
           </TouchableOpacity>
         </View>
       </ScrollView>
