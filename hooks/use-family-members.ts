@@ -20,12 +20,14 @@ export function useFamilyMembers() {
   const [inviteCode, setInviteCode] = useState("");
   const [familyName, setFamilyName] = useState("");
   const [loading, setLoading] = useState(true);
-  const [hasFamily, setHasFamily] = useState(false); // ✅ add this
+  const [hasFamily, setHasFamily] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) {
         setHasFamily(false);
         setLoading(false);
@@ -37,6 +39,7 @@ export function useFamilyMembers() {
         .select(
           "id,name,invite_code,family_members(id,full_name,relation,dob,blood_group,avatar_url,created_at)",
         )
+        .eq("admin_user_id", user.id) // ✅ only fetch families this user admins
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -48,7 +51,6 @@ export function useFamilyMembers() {
       }
 
       if (!data) {
-        // ✅ User has no family — reset everything, don't map
         setHasFamily(false);
         setFamilyId("");
         setInviteCode("");
@@ -57,7 +59,6 @@ export function useFamilyMembers() {
         return;
       }
 
-      // ✅ User has a family
       setHasFamily(true);
       setFamilyId(data.id);
       setInviteCode(data.invite_code);
@@ -103,12 +104,11 @@ export function useFamilyMembers() {
     inviteCode,
     familyName,
     loading,
-    hasFamily, // ✅ export it
+    hasFamily,
     refetch: fetchData,
   };
 }
 
-// Helper to convert "YYYY-MM-DD" into an age number
 const calculateAge = (dobString?: string) => {
   if (!dobString) return "--";
   const dob = new Date(dobString);
