@@ -32,19 +32,17 @@ export default function FamilySetupScreen() {
 useEffect(() => {
   const fetchUser = async () => {
     const { data, error } = await supabase
-  .from("join_requests")
-  .insert({
-    family_id: "a5daa450-a6f5-4bae-b542-5a71b7d675db",
-    user_id: "9622e623-00a1-427d-83dd-0836f6249d74",
-    status: "pending",
-    mapped_member_id: "36e2f278-4061-4736-9279-7bdfe7caff69",
-    requester_name: "Anas"
-  })
+      .from("join_requests")
+      .insert({
+        family_id: "a5daa450-...",
+        user_id: "9622e623-...",
+        status: "pending",
+        mapped_member_id: "36e2f278-...",  
+        requester_name: "Anas"
+      })
   };
-
   fetchUser();
 }, []);
-
   const router = useRouter();
   const { user } = useAuth();
   const { createFamily, saving } = useFamilySetup();

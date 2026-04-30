@@ -107,36 +107,73 @@ export default function ProfileDetails() {
   }, [loadProfile]);
 
 
-    const fetchRequest = async (inviteCode: string) => {
-      const {data, error} = await supabase.auth.getUser()
+   const fetchRequest = async (inviteCode: string) => {
+  const { data: authData, error } = await supabase.auth.getUser();
+  if (!authData.user) {
+    setJoinMessage("You must be logged in.");
+    setJoinMessageIsError(true);
+    return;
+  }
 
-      if(!data.user) {
-        console.error("Failed to fetch user", error);
-        return 
-      }
+  // ✅ Guard: check if user already belongs to any family
+  const { data: existingMembership } = await supabase
+    .from("family_members")
+    .select("id")
+    .eq("user_id", authData.user.id)
+    .maybeSingle();
 
-       const { data: families, error: famError } = await supabase
-      .from("families")
-      .select("id")
-      .eq('invite_code', inviteCode)
-      .maybeSingle()
+  if (existingMembership) {
+    setJoinMessage("You already belong to a family.");
+    setJoinMessageIsError(true);
+    return;
+  }
 
-    if(!families?.id) {
-      console.error('Invalid Family Code', error)
-      return
-    }
-    console.log('Sent To request to family id', families?.id)
+  const { data: families, error: famError } = await supabase
+    .from("families")
+    .select("id")
+    .eq("invite_code", inviteCode)
+    .maybeSingle();
 
-    const {data: familyMember, error: memberError} = await supabase
-    .from('join_requests')
+  if (!families?.id) {
+    setJoinMessage("Invalid invite code. Please check and try again.");
+    setJoinMessageIsError(true);
+    return;
+  }
+
+  // ✅ Guard: check if a pending request already exists
+  const { data: existingRequest } = await supabase
+    .from("join_requests")
+    .select("id")
+    .eq("family_id", families.id)
+    .eq("user_id", authData.user.id)
+    .maybeSingle();
+
+  if (existingRequest) {
+    setJoinMessage("You already sent a request to this family.");
+    setJoinMessageIsError(true);
+    return;
+  }
+
+  const { error: insertError } = await supabase
+    .from("join_requests")
     .insert({
-        family_id: families.id,
-        user_id: data.user.id,
-        status: "pending",
-        mapped_member_id: "36e2f278-4061-4736-9279-7bdfe7caff69",
-        requester_name: "Ayan"
-      })
-    }
+      family_id: families.id,
+      user_id: authData.user.id,
+      status: "pending",
+      mapped_member_id: null,           // ✅ no hardcoded UUID
+      requester_name: fullName || "Unknown",
+    });
+
+  if (insertError) {
+    setJoinMessage("Failed to send request. Please try again.");
+    setJoinMessageIsError(true);
+    return;
+  }
+
+  setJoinMessage("Join request sent! Waiting for family admin to approve.");
+  setJoinMessageIsError(false);
+  setInviteCode("");
+};
 
 
   const handleAvatarPick = async () => {

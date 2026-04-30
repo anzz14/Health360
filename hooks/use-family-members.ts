@@ -20,10 +20,18 @@ export function useFamilyMembers() {
   const [inviteCode, setInviteCode] = useState("");
   const [familyName, setFamilyName] = useState("");
   const [loading, setLoading] = useState(true);
+  const [hasFamily, setHasFamily] = useState(false); // ✅ add this
 
   const fetchData = async () => {
     setLoading(true);
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setHasFamily(false);
+        setLoading(false);
+        return;
+      }
+
       const { data, error } = await supabase
         .from("families")
         .select(
@@ -35,24 +43,13 @@ export function useFamilyMembers() {
 
       if (error) {
         console.error("Failed to fetch family dashboard data", error);
+        setHasFamily(false);
         return;
       }
 
-      const dashboard = data as {
-        id: string;
-        name: string;
-        invite_code: string;
-        family_members?: Array<{
-          id: string;
-          full_name: string;
-          relation: string | null;
-          dob: string | null;
-          blood_group: string | null;
-          avatar_url: string | null;
-        }>;
-      } | null;
-
-      if (!dashboard) {
+      if (!data) {
+        // ✅ User has no family — reset everything, don't map
+        setHasFamily(false);
         setFamilyId("");
         setInviteCode("");
         setFamilyName("");
@@ -60,36 +57,37 @@ export function useFamilyMembers() {
         return;
       }
 
-      setFamilyId(dashboard.id);
-      setInviteCode(dashboard.invite_code);
-      setFamilyName(dashboard.name);
+      // ✅ User has a family
+      setHasFamily(true);
+      setFamilyId(data.id);
+      setInviteCode(data.invite_code);
+      setFamilyName(data.name);
 
-      const formatted: FamilyMember[] = (dashboard.family_members || []).map(
-        (m) => {
-          const actualBlood = m.blood_group || "";
-          const actualAvatar =
-            m.avatar_url ||
-            `https://ui-avatars.com/api/?name=${encodeURIComponent(m.full_name)}&background=069594&color=fff`;
+      const formatted: FamilyMember[] = (data.family_members || []).map((m) => {
+        const actualBlood = m.blood_group || "";
+        const actualAvatar =
+          m.avatar_url ||
+          `https://ui-avatars.com/api/?name=${encodeURIComponent(m.full_name)}&background=069594&color=fff`;
 
-          return {
-            id: m.id,
-            name: m.full_name,
-            relation: m.relation || "Member",
-            age: calculateAge(m.dob || undefined),
-            bloodGroup: actualBlood || "N/A",
-            avatar: actualAvatar,
-            bloodColor: actualBlood ? "#DC2626" : "#6B7280",
-            bloodBg: actualBlood ? "#FEF2F2" : "#F3F4F6",
-            lastConsult: "--",
-            records: 0,
-          };
-        },
-      );
+        return {
+          id: m.id,
+          name: m.full_name,
+          relation: m.relation || "Member",
+          age: calculateAge(m.dob || undefined),
+          bloodGroup: actualBlood || "N/A",
+          avatar: actualAvatar,
+          bloodColor: actualBlood ? "#DC2626" : "#6B7280",
+          bloodBg: actualBlood ? "#FEF2F2" : "#F3F4F6",
+          lastConsult: "--",
+          records: 0,
+        };
+      });
 
       setMembers(formatted);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
       console.error("Unexpected error fetching family dashboard data", message);
+      setHasFamily(false);
     } finally {
       setLoading(false);
     }
@@ -105,6 +103,7 @@ export function useFamilyMembers() {
     inviteCode,
     familyName,
     loading,
+    hasFamily, // ✅ export it
     refetch: fetchData,
   };
 }
