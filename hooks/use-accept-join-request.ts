@@ -1,11 +1,11 @@
 import { supabase } from "@/lib/supabase";
-import { useCallback, useState } from "react";
 import {
   AcceptResult,
   FamilyMemberRow,
   JoinRequest,
   UserProfileRow,
 } from "@/types";
+import { useCallback, useState } from "react";
 
 export const useAcceptJoinRequest = () => {
   const [loading, setLoading] = useState(false);
@@ -15,60 +15,44 @@ export const useAcceptJoinRequest = () => {
    * Returns whether a merge dialog is needed.
    */
   const checkAndAccept = useCallback(
-    async (request: JoinRequest): Promise<AcceptResult> => {
+    async (request: any): Promise<AcceptResult> => {
       setLoading(true);
-
       try {
-        // Fetch the requester's user profile
-        const { data: profileData, error: profileError } = await supabase
-          .from("user_profiles")
-          .select("*")
-          .eq("id", request.user_id)
-          .maybeSingle();
-
-        if (profileError) {
-          console.error("Error fetching user profile:", profileError);
-          throw new Error("Failed to fetch user profile");
+        if (!request?.mapped_member_id) {
+          throw new Error("No mapped_member_id on request");
         }
+        const [
+          { data: profileData, error: profileError },
+          { data: memberData, error: memberError },
+        ] = await Promise.all([
+          supabase
+            .from("user_profiles")
+            .select("*")
+            .eq("id", request.user_id)
+            .maybeSingle(),
+          supabase
+            .from("family_members")
+            .select("*")
+            .eq("id", request.mapped_member_id)
+            .single(),
+        ]);
 
-        // Fetch the existing family member record
-        const { data: memberData, error: memberError } = await supabase
-          .from("family_members")
-          .select("*")
-          .eq("id", request.mapped_member_id)
-          .single();
+        if (profileError) throw new Error("Failed to fetch user profile");
+        if (memberError) throw new Error("Failed to fetch family member");
 
-        if (memberError) {
-          console.error("Error fetching family member:", memberError);
-          throw new Error("Failed to fetch family member");
-        }
-
-        const existingMember = memberData as FamilyMemberRow;
-        const incomingProfile = profileData as UserProfileRow | null;
-
-        // If no user profile exists, no merge needed
-        if (!incomingProfile) {
-          return {
-            needsMerge: false,
-            existingMember,
-          };
-        }
-
-        // Both profiles exist, merge dialog is needed
         return {
-          needsMerge: true,
-          existingMember,
-          incomingProfile,
+          existingMember: memberData as FamilyMemberRow,
+          incomingProfile: (profileData as UserProfileRow) ?? undefined,
+          needsMerge: !!profileData,
         };
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Unknown error";
-        console.error("Error in checkAndAccept:", message);
+        console.error("[checkAndAccept]", err);
         throw err;
       } finally {
         setLoading(false);
       }
     },
-    []
+    [],
   );
 
   /**
@@ -79,72 +63,69 @@ export const useAcceptJoinRequest = () => {
   const finalizeAccept = useCallback(
     async (
       request: JoinRequest,
-      chosenSource: "existing" | "incoming",
-      incomingProfile?: UserProfileRow
+      incomingProfile?: UserProfileRow | null,
     ): Promise<void> => {
       setLoading(true);
-
       try {
-        // Fetch the current family member to get its data
-        const { data: currentMember, error: fetchError } = await supabase
-          .from("family_members")
-          .select("*")
-          .eq("id", request.mapped_member_id)
-          .single();
-
-        if (fetchError || !currentMember) {
-          throw new Error("Failed to fetch current family member");
+        if (!request.mapped_member_id) {
+          throw new Error("No mapped_member_id on this request");
         }
 
         const memberUpdate: Partial<FamilyMemberRow> = {
           user_id: request.user_id,
+          ...(incomingProfile?.full_name && {
+            full_name: incomingProfile.full_name,
+          }),
+          ...(incomingProfile?.dob && { dob: incomingProfile.dob }),
+          ...(incomingProfile?.gender && { gender: incomingProfile.gender }),
+          ...(incomingProfile?.blood_group && {
+            blood_group: incomingProfile.blood_group,
+          }),
+          ...(incomingProfile?.avatar_url && {
+            avatar_url: incomingProfile.avatar_url,
+          }),
+          ...(incomingProfile?.height_cm && {
+            height_cm: incomingProfile.height_cm,
+          }),
+          ...(incomingProfile?.weight_kg && {
+            weight_kg: incomingProfile.weight_kg,
+          }),
+          ...(incomingProfile?.medical_notes && {
+            medical_notes: incomingProfile.medical_notes,
+          }),
         };
 
-        // If the user chose incoming profile, merge in the chosen fields
-        if (chosenSource === "incoming" && incomingProfile) {
-          memberUpdate.full_name = incomingProfile.full_name;
-          memberUpdate.dob = incomingProfile.dob;
-          memberUpdate.blood_group = incomingProfile.blood_group;
-          memberUpdate.gender = incomingProfile.gender;
-          memberUpdate.avatar_url = incomingProfile.avatar_url;
-          memberUpdate.height_cm = incomingProfile.height_cm;
-          memberUpdate.weight_kg = incomingProfile.weight_kg;
-          memberUpdate.medical_notes = incomingProfile.medical_notes;
-        }
-        // If existing, just set user_id (already done above)
-
-        // 1. Update the family_members row
         const { error: updateError } = await supabase
           .from("family_members")
           .update(memberUpdate)
           .eq("id", request.mapped_member_id);
 
-        if (updateError) {
-          console.error("Error updating family member:", updateError);
-          throw new Error("Failed to update family member");
-        }
+        if (updateError)
+          throw new Error(
+            `Failed to update family member: ${updateError.message}`,
+          );
 
-        // 2. Delete the join_requests row
         const { error: deleteError } = await supabase
           .from("join_requests")
           .delete()
           .eq("id", request.id);
 
         if (deleteError) {
-          console.error("Error deleting join request:", deleteError);
-          throw new Error("Failed to delete join request");
+          console.error(
+            "[finalizeAccept] join_request delete failed:",
+            deleteError.message,
+          );
         }
 
-        console.log("Join request accepted successfully");
+        console.log("[finalizeAccept] accepted successfully");
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Unknown error";
-        console.error("Error in finalizeAccept:", message);
+        console.error("[finalizeAccept]", err);
         throw err;
       } finally {
         setLoading(false);
       }
     },
-    []
+    [],
   );
 
   return { checkAndAccept, finalizeAccept, loading };

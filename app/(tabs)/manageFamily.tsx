@@ -431,7 +431,7 @@ const JoinRequestSheet = React.forwardRef<SheetRef, SheetProps>(
       setAccepting(true);
 
       try {
-        // 1. Fetch the joining member's user_profile
+        // Always fetch the joiner's real profile first
         const { data: profile, error: profErr } = await supabase
           .from("user_profiles")
           .select(
@@ -441,26 +441,40 @@ const JoinRequestSheet = React.forwardRef<SheetRef, SheetProps>(
           .maybeSingle();
 
         if (profErr)
-          console.warn("user_profile fetch warning:", profErr.message);
+          console.warn(
+            "[handleAccept] user_profile fetch warning:",
+            profErr.message,
+          );
 
-        // Resolved display name — profile > requester_name
+        // Real name wins; fall back to what the requester typed when joining
         const resolvedName =
           profile?.full_name?.trim() || req.requester_name || "Unknown";
 
         if (selId) {
-          // ── PATH A: replace the existing stub with requester's profile data ──
+          // PATH A — link to existing stub and overwrite ALL fields with real data.
+          // Spread only non-null profile fields so a sparse profile doesn't blank the stub.
           const { error: updateErr } = await supabase
             .from("family_members")
             .update({
               user_id: req.user_id,
               full_name: resolvedName,
-              dob: profile?.dob ?? null,
-              gender: profile?.gender ?? null,
-              blood_group: profile?.blood_group ?? null,
-              avatar_url: profile?.avatar_url ?? null,
-              height_cm: profile?.height_cm ?? null,
-              weight_kg: profile?.weight_kg ?? null,
-              medical_notes: profile?.medical_notes ?? null,
+              ...(profile?.dob != null && { dob: profile.dob }),
+              ...(profile?.gender != null && { gender: profile.gender }),
+              ...(profile?.blood_group != null && {
+                blood_group: profile.blood_group,
+              }),
+              ...(profile?.avatar_url != null && {
+                avatar_url: profile.avatar_url,
+              }),
+              ...(profile?.height_cm != null && {
+                height_cm: profile.height_cm,
+              }),
+              ...(profile?.weight_kg != null && {
+                weight_kg: profile.weight_kg,
+              }),
+              ...(profile?.medical_notes != null && {
+                medical_notes: profile.medical_notes,
+              }),
             })
             .eq("id", selId);
 
@@ -473,7 +487,7 @@ const JoinRequestSheet = React.forwardRef<SheetRef, SheetProps>(
             return;
           }
         } else {
-          // ── PATH B: insert a fresh family_member from profile data ────────────
+          // PATH B — no stub picked; insert a fresh row from real profile data
           const { error: insertErr } = await supabase
             .from("family_members")
             .insert({
@@ -497,18 +511,20 @@ const JoinRequestSheet = React.forwardRef<SheetRef, SheetProps>(
           }
         }
 
-        // 2. Mark request approved — removes it from the pending list
+        // Delete the request — it's handled
         const { error: deleteErr } = await supabase
           .from("join_requests")
           .delete()
           .eq("id", req.id);
 
-        if (deleteErr) {
-          console.error("join_request delete failed:", deleteErr.message);
-        }
+        if (deleteErr)
+          console.error(
+            "[handleAccept] request delete failed:",
+            deleteErr.message,
+          );
 
         dismiss();
-        onHandled(); // re-fetches pending requests + members list
+        onHandled();
       } catch (err: any) {
         Alert.alert("Error", err?.message ?? "Something went wrong.");
       } finally {
