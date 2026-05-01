@@ -1,6 +1,8 @@
 import { AddMemberBottomSheet } from "@/components/add-member-bottom-sheet";
 import { Typography } from "@/components/typography/typography";
 import { FamilyMember, useFamilyMembers } from "@/hooks/use-family-members";
+import { useKickFamilyMember } from "@/hooks/use-kick-family-member";
+
 import { supabase } from "@/lib/supabase";
 import { BottomSheetModal, BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import {
@@ -29,6 +31,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Modal,
   Platform,
   SafeAreaView,
   ScrollView,
@@ -114,100 +117,144 @@ const getAge = (dob: string | null): number | null => {
 
 // ─── Member Card ─────────────────────────────────────────────────────────────
 
-const MemberCard = ({ m }: { m: FamilyMember }) => (
-  <TouchableOpacity
-    activeOpacity={0.85}
-    style={{
-      backgroundColor: "#FFF",
-      borderRadius: 20,
-      padding: 16,
-      marginBottom: 14,
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.06,
-      shadowRadius: 8,
-      elevation: 3,
-    }}
-  >
-    <View style={{ flexDirection: "row", alignItems: "center" }}>
-      <View
-        style={{
-          width: 52,
-          height: 52,
-          borderRadius: 9999,
-          overflow: "hidden",
-          flexShrink: 0,
-        }}
-      >
-        <Image source={{ uri: m.avatar }} style={{ width: 52, height: 52 }} />
-      </View>
-      <View style={{ flex: 1, marginLeft: 14 }}>
-        <Typography
-          variant="body"
-          color="heading"
-          className="font-bold"
-          style={{ fontSize: 17 }}
-        >
-          {m.name}
-        </Typography>
+// ─── Member Card ─────────────────────────────────────────────────────────────
+
+const MemberCard = ({
+  m,
+  isAdmin,
+  onKick,
+  isKicking,
+}: {
+  m: FamilyMember;
+  isAdmin: boolean;
+  onKick?: (member: FamilyMember) => void;
+  isKicking?: boolean;
+}) => {
+  const canKick = isAdmin && m.relation !== "Self";
+
+  return (
+    <View
+      style={{
+        backgroundColor: "#FFF",
+        borderRadius: 20,
+        padding: 16,
+        marginBottom: 14,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+        elevation: 3,
+      }}
+    >
+      <View style={{ flexDirection: "row", alignItems: "center" }}>
         <View
           style={{
-            flexDirection: "row",
-            alignItems: "center",
-            marginTop: 4,
-            gap: 8,
+            width: 52,
+            height: 52,
+            borderRadius: 9999,
+            overflow: "hidden",
+            flexShrink: 0,
           }}
         >
-          <Typography variant="body-small" color="secondary">
-            {m.relation} · {m.age} yrs
+          <Image source={{ uri: m.avatar }} style={{ width: 52, height: 52 }} />
+        </View>
+
+        <View style={{ flex: 1, marginLeft: 14 }}>
+          <Typography
+            variant="body"
+            color="heading"
+            className="font-bold"
+            style={{ fontSize: 17 }}
+          >
+            {m.name}
           </Typography>
           <View
             style={{
-              backgroundColor: m.bloodBg,
-              paddingHorizontal: 8,
-              paddingVertical: 2,
-              borderRadius: 6,
+              flexDirection: "row",
+              alignItems: "center",
+              marginTop: 4,
+              gap: 8,
+            }}
+          >
+            <Typography variant="body-small" color="secondary">
+              {m.relation} · {m.age} yrs
+            </Typography>
+            <View
+              style={{
+                backgroundColor: m.bloodBg,
+                paddingHorizontal: 8,
+                paddingVertical: 2,
+                borderRadius: 6,
+              }}
+            >
+              <Typography
+                variant="body-small"
+                className="font-bold"
+                style={{ fontSize: 11, color: m.bloodColor }}
+              >
+                {m.bloodGroup}
+              </Typography>
+            </View>
+          </View>
+        </View>
+
+        {canKick ? (
+          <TouchableOpacity
+            onPress={() => onKick?.(m)}
+            disabled={isKicking}
+            activeOpacity={0.75}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={{
+              backgroundColor: "#FEF2F2",
+              borderRadius: 8,
+              paddingHorizontal: 10,
+              paddingVertical: 6,
+              borderWidth: 1,
+              borderColor: "#FECACA",
+              opacity: isKicking ? 0.65 : 1,
             }}
           >
             <Typography
               variant="body-small"
               className="font-bold"
-              style={{ fontSize: 11, color: m.bloodColor }}
+              style={{ fontSize: 11, color: "#DC2626" }}
             >
-              {m.bloodGroup}
+              Remove
             </Typography>
-          </View>
+          </TouchableOpacity>
+        ) : (
+          <ChevronRight size={20} color="#CBD5E1" strokeWidth={2} />
+        )}
+      </View>
+
+      <View
+        style={{ height: 1, backgroundColor: "#E5E7EB", marginVertical: 12 }}
+      />
+      <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <CalendarDays size={14} color="#9CA3AF" strokeWidth={1.8} />
+          <Typography
+            variant="body-small"
+            color="secondary"
+            style={{ fontSize: 12 }}
+          >
+            Last consult: {m.lastConsult}
+          </Typography>
+        </View>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <Folder size={14} color="#9CA3AF" strokeWidth={1.8} />
+          <Typography
+            variant="body-small"
+            color="secondary"
+            style={{ fontSize: 12 }}
+          >
+            {m.records} Records
+          </Typography>
         </View>
       </View>
-      <ChevronRight size={20} color="#CBD5E1" strokeWidth={2} />
     </View>
-    <View
-      style={{ height: 1, backgroundColor: "#E5E7EB", marginVertical: 12 }}
-    />
-    <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-        <CalendarDays size={14} color="#9CA3AF" strokeWidth={1.8} />
-        <Typography
-          variant="body-small"
-          color="secondary"
-          style={{ fontSize: 12 }}
-        >
-          Last consult: {m.lastConsult}
-        </Typography>
-      </View>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-        <Folder size={14} color="#9CA3AF" strokeWidth={1.8} />
-        <Typography
-          variant="body-small"
-          color="secondary"
-          style={{ fontSize: 12 }}
-        >
-          {m.records} Records
-        </Typography>
-      </View>
-    </View>
-  </TouchableOpacity>
-);
+  );
+};
 
 // ─── Join Request Card ────────────────────────────────────────────────────────
 
@@ -796,6 +843,8 @@ export default function ManageFamilyScreen() {
   const [activeNav, setActiveNav] = useState("home");
   const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
   const [requestsLoading, setRequestsLoading] = useState(true);
+  const [pendingKickMember, setPendingKickMember] =
+    useState<FamilyMember | null>(null);
 
   const addMemberRef = useRef<BottomSheetModal>(null);
   const joinRequestRef = useRef<SheetRef>(null);
@@ -809,6 +858,7 @@ export default function ManageFamilyScreen() {
     isAdmin,
     refetch,
   } = useFamilyMembers();
+  const { kickMember, kicking } = useKickFamilyMember();
 
   // Only ever fetch PENDING requests — approved/rejected stay off-screen
   const fetchJoinRequests = useCallback(async (fid: string) => {
@@ -840,6 +890,25 @@ export default function ManageFamilyScreen() {
     if (familyId) await fetchJoinRequests(familyId);
     await refetch();
   }, [familyId, fetchJoinRequests, refetch]);
+
+  const handleKickMember = useCallback((member: FamilyMember) => {
+    if (member.relation === "Self") return;
+    setPendingKickMember(member);
+  }, []);
+
+  const confirmKickMember = useCallback(async () => {
+    if (!pendingKickMember || !familyId) return;
+
+    const member = pendingKickMember;
+    setPendingKickMember(null);
+
+    const result = await kickMember(familyId, member.id);
+    if (result.success) {
+      await refetch();
+    } else {
+      Alert.alert("Error", result.error ?? "Failed to remove member");
+    }
+  }, [familyId, kickMember, pendingKickMember, refetch]);
 
   return (
     <SafeAreaView
@@ -1005,7 +1074,13 @@ export default function ManageFamilyScreen() {
               {members.length} members in {familyName || "your family"}
             </Typography>
             {members.map((m) => (
-              <MemberCard key={m.id} m={m} />
+              <MemberCard
+                key={m.id}
+                m={m}
+                isAdmin={isAdmin}
+                onKick={handleKickMember}
+                isKicking={kicking}
+              />
             ))}
 
             {/* ── Admin only: add member ── */}
@@ -1054,6 +1129,87 @@ export default function ManageFamilyScreen() {
           </>
         )}
       </ScrollView>
+
+      <Modal
+        visible={!!pendingKickMember}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPendingKickMember(null)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(15, 23, 42, 0.45)",
+            justifyContent: "center",
+            paddingHorizontal: 24,
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: "#FFF",
+              borderRadius: 24,
+              padding: 20,
+              shadowColor: "#000",
+              shadowOpacity: 0.18,
+              shadowRadius: 16,
+              elevation: 12,
+            }}
+          >
+            <Typography variant="h3" color="heading" className="mb-2">
+              Remove Member
+            </Typography>
+            <Typography variant="body" color="secondary" className="mb-6">
+              {pendingKickMember
+                ? `Remove ${pendingKickMember.name} from the family? This cannot be undone.`
+                : "Remove this member from the family? This cannot be undone."}
+            </Typography>
+
+            <View style={{ flexDirection: "row", gap: 12 }}>
+              <TouchableOpacity
+                onPress={() => setPendingKickMember(null)}
+                activeOpacity={0.85}
+                style={{
+                  flex: 1,
+                  height: 52,
+                  borderRadius: 16,
+                  backgroundColor: "#F3F4F6",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Typography
+                  variant="button"
+                  color="heading"
+                  className="font-bold"
+                >
+                  Cancel
+                </Typography>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={confirmKickMember}
+                activeOpacity={0.85}
+                style={{
+                  flex: 1,
+                  height: 52,
+                  borderRadius: 16,
+                  backgroundColor: "#DC2626",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Typography
+                  variant="button"
+                  color="white"
+                  className="font-bold"
+                >
+                  Remove
+                </Typography>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Bottom nav */}
       <View
