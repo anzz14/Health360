@@ -4,31 +4,13 @@ import { FamilyMember, useFamilyMembers } from "@/hooks/use-family-members";
 import { supabase } from "@/lib/supabase";
 import { BottomSheetModal, BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import {
-  ArrowLeft,
-  BriefcaseMedical,
-  CalendarDays,
-  Check,
-  ChevronRight,
-  Copy,
-  FileText,
-  Folder,
-  Home,
-  Plus,
-  ShoppingCart,
-  User,
-  UserPlus,
-  X,
+  ArrowLeft, BriefcaseMedical, CalendarDays, Check, ChevronRight,
+  Copy, FileText, Folder, Home, Plus, ShoppingCart, User, UserPlus, X,
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Image,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  TouchableOpacity,
-  View,
+  ActivityIndicator, Alert, Image, Platform, SafeAreaView,
+  ScrollView, StatusBar, TouchableOpacity, View,
 } from "react-native";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -43,7 +25,7 @@ type JoinRequest = {
   mapped_member_id?: string | null;
 };
 
-type FamilyMemberOption = {
+type MemberOption = {
   id: string;
   full_name: string;
   relation: string | null;
@@ -54,13 +36,11 @@ type FamilyMemberOption = {
 
 // ─── Nav ──────────────────────────────────────────────────────────────────────
 
-type NavItem = { id: string; label: string; icon: (a: boolean) => React.ReactNode };
-
-const NAV: NavItem[] = [
-  { id: "home",    label: "Home",    icon: (a) => <Home        size={22} color={a ? "#069594" : "#9CA3AF"} strokeWidth={2} /> },
-  { id: "records", label: "Records", icon: (a) => <FileText    size={22} color={a ? "#069594" : "#9CA3AF"} strokeWidth={2} /> },
-  { id: "orders",  label: "Orders",  icon: (a) => <ShoppingCart size={22} color={a ? "#069594" : "#9CA3AF"} strokeWidth={2} /> },
-  { id: "profile", label: "Profile", icon: (a) => <User        size={22} color={a ? "#069594" : "#9CA3AF"} strokeWidth={2} /> },
+const NAV = [
+  { id: "home",    label: "Home",    icon: (a: boolean) => <Home         size={22} color={a ? "#069594" : "#9CA3AF"} strokeWidth={2} /> },
+  { id: "records", label: "Records", icon: (a: boolean) => <FileText     size={22} color={a ? "#069594" : "#9CA3AF"} strokeWidth={2} /> },
+  { id: "orders",  label: "Orders",  icon: (a: boolean) => <ShoppingCart size={22} color={a ? "#069594" : "#9CA3AF"} strokeWidth={2} /> },
+  { id: "profile", label: "Profile", icon: (a: boolean) => <User         size={22} color={a ? "#069594" : "#9CA3AF"} strokeWidth={2} /> },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -70,63 +50,40 @@ const getInitials = (name: string) =>
 
 const getAge = (dob: string | null): number | null => {
   if (!dob) return null;
-  const diff = Date.now() - new Date(dob).getTime();
-  return Math.abs(new Date(diff).getUTCFullYear() - 1970);
+  return Math.abs(new Date(Date.now() - new Date(dob).getTime()).getUTCFullYear() - 1970);
 };
 
 // ─── Member Card ─────────────────────────────────────────────────────────────
 
-const MemberCard = ({ member }: { member: FamilyMember }) => (
+const MemberCard = ({ m }: { m: FamilyMember }) => (
   <TouchableOpacity
     activeOpacity={0.85}
-    style={{
-      backgroundColor: "#FFFFFF",
-      borderRadius: 20,
-      padding: 16,
-      marginBottom: 14,
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.06,
-      shadowRadius: 8,
-      elevation: 3,
-    }}
+    style={{ backgroundColor: "#FFF", borderRadius: 20, padding: 16, marginBottom: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 }}
   >
     <View style={{ flexDirection: "row", alignItems: "center" }}>
       <View style={{ width: 52, height: 52, borderRadius: 9999, overflow: "hidden", flexShrink: 0 }}>
-        <Image source={{ uri: member.avatar }} style={{ width: 52, height: 52 }} />
+        <Image source={{ uri: m.avatar }} style={{ width: 52, height: 52 }} />
       </View>
       <View style={{ flex: 1, marginLeft: 14 }}>
-        <Typography variant="body" color="heading" className="font-bold" style={{ fontSize: 17 }}>
-          {member.name}
-        </Typography>
+        <Typography variant="body" color="heading" className="font-bold" style={{ fontSize: 17 }}>{m.name}</Typography>
         <View style={{ flexDirection: "row", alignItems: "center", marginTop: 4, gap: 8 }}>
-          <Typography variant="body-small" color="secondary">
-            {member.relation} · {member.age} yrs
-          </Typography>
-          <View style={{ backgroundColor: member.bloodBg, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
-            <Typography variant="body-small" className="font-bold" style={{ fontSize: 11, color: member.bloodColor }}>
-              {member.bloodGroup}
-            </Typography>
+          <Typography variant="body-small" color="secondary">{m.relation} · {m.age} yrs</Typography>
+          <View style={{ backgroundColor: m.bloodBg, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
+            <Typography variant="body-small" className="font-bold" style={{ fontSize: 11, color: m.bloodColor }}>{m.bloodGroup}</Typography>
           </View>
         </View>
       </View>
       <ChevronRight size={20} color="#CBD5E1" strokeWidth={2} />
     </View>
-
-    <View style={{ height: 1, backgroundColor: "#E5E7EB", marginVertical: 12, width: "100%" }} />
-
-    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+    <View style={{ height: 1, backgroundColor: "#E5E7EB", marginVertical: 12 }} />
+    <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
         <CalendarDays size={14} color="#9CA3AF" strokeWidth={1.8} />
-        <Typography variant="body-small" color="secondary" style={{ fontSize: 12 }}>
-          Last consult: {member.lastConsult}
-        </Typography>
+        <Typography variant="body-small" color="secondary" style={{ fontSize: 12 }}>Last consult: {m.lastConsult}</Typography>
       </View>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
         <Folder size={14} color="#9CA3AF" strokeWidth={1.8} />
-        <Typography variant="body-small" color="secondary" style={{ fontSize: 12 }}>
-          {member.records} Records
-        </Typography>
+        <Typography variant="body-small" color="secondary" style={{ fontSize: 12 }}>{m.records} Records</Typography>
       </View>
     </View>
   </TouchableOpacity>
@@ -134,558 +91,405 @@ const MemberCard = ({ member }: { member: FamilyMember }) => (
 
 // ─── Join Request Card ────────────────────────────────────────────────────────
 
-const JoinRequestCard = ({
-  request,
-  onPress,
-}: {
-  request: JoinRequest;
-  onPress: (req: JoinRequest) => void;
-}) => {
-  const isPending = request.status === "pending";
-
-  const statusColor = request.status === "approved" ? "#15803D" : request.status === "rejected" ? "#B91C1C" : "#069594";
-  const statusBg   = request.status === "approved" ? "#DCFCE7" : request.status === "rejected" ? "#FEE2E2"  : "#E0F4F4";
-  const statusText = request.status === "pending" ? "Review →" : request.status;
-
-  return (
-    <TouchableOpacity
-      activeOpacity={isPending ? 0.82 : 1}
-      onPress={() => isPending && onPress(request)}
-      style={{
-        backgroundColor: "#FFFFFF",
-        borderRadius: 20,
-        padding: 16,
-        marginBottom: 14,
-        borderWidth: isPending ? 1.5 : 1,
-        borderColor: isPending ? "#A3D6D5" : "#E5E7EB",
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-        elevation: 2,
-      }}
-    >
-      <View style={{ flexDirection: "row", alignItems: "center" }}>
-        {/* Initials avatar */}
-        <View
-          style={{
-            width: 48,
-            height: 48,
-            borderRadius: 9999,
-            backgroundColor: "#E0F4F4",
-            alignItems: "center",
-            justifyContent: "center",
-            marginRight: 14,
-          }}
-        >
-          <Typography variant="body" color="primary" className="font-bold" style={{ fontSize: 15 }}>
-            {getInitials(request.requester_name || "?")}
-          </Typography>
-        </View>
-
-        <View style={{ flex: 1 }}>
-          <Typography variant="body" color="heading" className="font-bold" style={{ fontSize: 16 }}>
-            {request.requester_name || "Unknown requester"}
-          </Typography>
-          <Typography variant="body-small" color="secondary" className="mt-1">
-            {isPending ? "Wants to join your family" : "Sent a join request"}
-          </Typography>
-        </View>
-
-        {/* Status badge */}
-        <View style={{ backgroundColor: statusBg, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 9999 }}>
-          <Typography variant="body-small" className="font-bold capitalize" style={{ color: statusColor, fontSize: 11 }}>
-            {statusText}
-          </Typography>
-        </View>
-      </View>
-
-      <View style={{ height: 1, backgroundColor: "#F3F4F6", marginVertical: 10 }} />
-
-      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-        <Typography variant="body-small" color="secondary">
-          {new Date(request.created_at).toLocaleDateString("en-IN", {
-            day: "numeric", month: "short", year: "numeric",
-          })}
+const JoinRequestCard = ({ req, onPress }: { req: JoinRequest; onPress: (r: JoinRequest) => void }) => (
+  <TouchableOpacity
+    activeOpacity={0.82}
+    onPress={() => onPress(req)}
+    style={{ backgroundColor: "#FFF", borderRadius: 20, padding: 16, marginBottom: 14, borderWidth: 1.5, borderColor: "#A3D6D5", shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 }}
+  >
+    <View style={{ flexDirection: "row", alignItems: "center" }}>
+      <View style={{ width: 48, height: 48, borderRadius: 9999, backgroundColor: "#E0F4F4", alignItems: "center", justifyContent: "center", marginRight: 14 }}>
+        <Typography variant="body" color="primary" className="font-bold" style={{ fontSize: 15 }}>
+          {getInitials(req.requester_name || "?")}
         </Typography>
-        {isPending && (
-          <Typography variant="body-small" color="primary" className="font-bold" style={{ fontSize: 11 }}>
-            Tap to accept or deny
-          </Typography>
-        )}
       </View>
-    </TouchableOpacity>
-  );
-};
+      <View style={{ flex: 1 }}>
+        <Typography variant="body" color="heading" className="font-bold" style={{ fontSize: 16 }}>{req.requester_name || "Unknown"}</Typography>
+        <Typography variant="body-small" color="secondary" className="mt-1">Wants to join your family</Typography>
+      </View>
+      <View style={{ backgroundColor: "#E0F4F4", paddingHorizontal: 10, paddingVertical: 5, borderRadius: 9999 }}>
+        <Typography variant="body-small" className="font-bold" style={{ color: "#069594", fontSize: 11 }}>Review →</Typography>
+      </View>
+    </View>
+    <View style={{ height: 1, backgroundColor: "#F3F4F6", marginVertical: 10 }} />
+    <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+      <Typography variant="body-small" color="secondary">
+        {new Date(req.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+      </Typography>
+      <Typography variant="body-small" color="primary" className="font-bold" style={{ fontSize: 11 }}>Tap to accept or deny</Typography>
+    </View>
+  </TouchableOpacity>
+);
 
-// ─── Join Request Bottom Sheet ────────────────────────────────────────────────
+// ─── Join Request Sheet ───────────────────────────────────────────────────────
 
-type JoinRequestSheetProps = {
-  familyId: string;
-  onHandled: () => void;
-};
+type SheetProps = { familyId: string; onHandled: () => void };
+type SheetRef   = BottomSheetModal & { openWithRequest: (r: JoinRequest) => void };
 
-// We expose openWithRequest via a custom ref shape
-type JoinRequestSheetRef = BottomSheetModal & {
-  openWithRequest: (req: JoinRequest) => void;
-};
+const JoinRequestSheet = React.forwardRef<SheetRef, SheetProps>(({ familyId, onHandled }, ref) => {
+  const snapPoints = useMemo(() => ["88%"], []);
+  const innerRef   = useRef<BottomSheetModal>(null);
 
-const JoinRequestSheet = React.forwardRef<JoinRequestSheetRef, JoinRequestSheetProps>(
-  ({ familyId, onHandled }, ref) => {
-    const snapPoints = useMemo(() => ["88%"], []);
-    const innerRef = useRef<BottomSheetModal>(null);
+  const [req,       setReq]       = useState<JoinRequest | null>(null);
+  const [options,   setOptions]   = useState<MemberOption[]>([]);
+  // null = "None of these" → create new; string = existing member id → overwrite
+  const [selId,     setSelId]     = useState<string | null>(null);
+  const [loading,   setLoading]   = useState(false);
+  const [accepting, setAccepting] = useState(false);
+  const [denying,   setDenying]   = useState(false);
 
-    const [request, setRequest]               = useState<JoinRequest | null>(null);
-    const [memberOptions, setMemberOptions]   = useState<FamilyMemberOption[]>([]);
-    const [selectedId, setSelectedId]         = useState<string | null>(null); // null = "none of these"
-    const [loadingOptions, setLoadingOptions] = useState(false);
-    const [accepting, setAccepting]           = useState(false);
-    const [denying, setDenying]               = useState(false);
-
-    // Expose openWithRequest to parent via forwarded ref
-    React.useImperativeHandle(ref, () => ({
-      ...(innerRef.current as any),
-      openWithRequest: async (req: JoinRequest) => {
-        setRequest(req);
-        setSelectedId(req.mapped_member_id ?? null);
-        setLoadingOptions(true);
-
-        const { data } = await supabase
-          .from("family_members")
-          .select("id, full_name, relation, dob, blood_group, avatar_url")
-          .eq("family_id", familyId)
-          .order("created_at", { ascending: true });
-
-        setMemberOptions((data as FamilyMemberOption[]) || []);
-        setLoadingOptions(false);
-        innerRef.current?.present();
-      },
-    }));
-
-    const dismiss = useCallback(() => innerRef.current?.dismiss(), []);
-
-   const handleDeny = async () => {
-  if (!request) return;
-  setDenying(true);
-  await supabase
-    .from("join_requests")
-    .update({ status: "rejected" })  // ✅ update instead of delete
-    .eq("id", request.id);
-  setDenying(false);
-  dismiss();
-  onHandled();
-};
-
-
-const handleAccept = async () => {
-  if (!request) return;
-  setAccepting(true);
-
-  try {
-    // ✅ Just a plain select — no .update() here
-    const { data: profile } = await supabase
-      .from("user_profiles")
-      .select("*")
-      .eq("id", request.user_id)
-      .maybeSingle();
-
-    if (selectedId) {
-      await supabase
+  React.useImperativeHandle(ref, () => ({
+    ...(innerRef.current as any),
+    openWithRequest: async (r: JoinRequest) => {
+      setReq(r);
+      setSelId(null); // always start unselected — admin must consciously choose
+      setLoading(true);
+      const { data } = await supabase
         .from("family_members")
-        .update({
-          user_id: request.user_id,
-          ...(profile && {
-            full_name:     profile.full_name     || undefined,
-            dob:           profile.dob           || undefined,
-            blood_group:   profile.blood_group   || undefined,
-            gender:        profile.gender        || undefined,
-            avatar_url:    profile.avatar_url    || undefined,
-            height_cm:     profile.height_cm     || undefined,
-            weight_kg:     profile.weight_kg     || undefined,
-            medical_notes: profile.medical_notes || undefined,
-          }),
-        })
-        .eq("id", selectedId);
-    } else {
-      await supabase.from("family_members").insert({
-        family_id:     request.family_id,
-        user_id:       request.user_id,
-        full_name:     profile?.full_name    || request.requester_name,
-        relation:      "Member",
-        dob:           profile?.dob          ?? null,
-        blood_group:   profile?.blood_group  ?? null,
-        gender:        profile?.gender       ?? null,
-        avatar_url:    profile?.avatar_url   ?? null,
-        height_cm:     profile?.height_cm    ?? null,
-        weight_kg:     profile?.weight_kg    ?? null,
-        medical_notes: profile?.medical_notes ?? null,
-      });
-    }
+        .select("id, full_name, relation, dob, blood_group, avatar_url")
+        .eq("family_id", familyId)
+        .order("created_at", { ascending: true });
+      setOptions((data as MemberOption[]) || []);
+      setLoading(false);
+      innerRef.current?.present();
+    },
+  }));
 
-    // ✅ Update join_request status to approved
-    await supabase
+  const dismiss = useCallback(() => innerRef.current?.dismiss(), []);
+
+  // ── Deny ────────────────────────────────────────────────────────────────────
+  const handleDeny = async () => {
+    if (!req) return;
+    setDenying(true);
+    const { error } = await supabase
       .from("join_requests")
-      .update({ status: "accepted" })
-      .eq("id", request.id);
+      .update({ status: "rejected" })
+      .eq("id", req.id);
 
+    if (error) {
+      Alert.alert("Error", `Failed to deny: ${error.message}`);
+      setDenying(false);
+      return;
+    }
+    setDenying(false);
     dismiss();
     onHandled();
-  } catch (err) {
-    console.error("Accept error:", err);
-  } finally {
-    setAccepting(false);
-  }
-};
+  };
 
+  // ── Accept ───────────────────────────────────────────────────────────────────
+  /**
+   * PATH A — selId is set (admin picked an existing family_member stub):
+   *   → Fetch the requester's user_profile (their real data)
+   *   → UPDATE family_members SET (all profile fields + user_id) WHERE id = selId
+   *     This replaces admin's placeholder with the real member's own data
+   *   → UPDATE join_requests SET status = 'approved'
+   *
+   * PATH B — selId is null ("None of these"):
+   *   → INSERT new family_members row from user_profile
+   *   → UPDATE join_requests SET status = 'approved'
+   */
+  const handleAccept = async () => {
+    if (!req) return;
+    setAccepting(true);
 
+    try {
+      // 1. Fetch the joining member's user_profile
+      const { data: profile, error: profErr } = await supabase
+        .from("user_profiles")
+        .select("full_name, dob, gender, blood_group, avatar_url, height_cm, weight_kg, medical_notes")
+        .eq("id", req.user_id)
+        .maybeSingle();
 
+      if (profErr) console.warn("user_profile fetch warning:", profErr.message);
+
+      // Resolved display name — profile > requester_name
+      const resolvedName = profile?.full_name?.trim() || req.requester_name || "Unknown";
+
+      if (selId) {
+        // ── PATH A: replace the existing stub with requester's profile data ──
+        const { error: updateErr } = await supabase
+          .from("family_members")
+          .update({
+            user_id:       req.user_id,
+            full_name:     resolvedName,
+            dob:           profile?.dob           ?? null,
+            gender:        profile?.gender         ?? null,
+            blood_group:   profile?.blood_group    ?? null,
+            avatar_url:    profile?.avatar_url     ?? null,
+            height_cm:     profile?.height_cm      ?? null,
+            weight_kg:     profile?.weight_kg      ?? null,
+            medical_notes: profile?.medical_notes  ?? null,
+          })
+          .eq("id", selId);
+
+        if (updateErr) {
+          Alert.alert("Error", `Could not update member: ${updateErr.message}`);
+          setAccepting(false);
+          return;
+        }
+      } else {
+        // ── PATH B: insert a fresh family_member from profile data ────────────
+        const { error: insertErr } = await supabase
+          .from("family_members")
+          .insert({
+            family_id:     req.family_id,
+            user_id:       req.user_id,
+            full_name:     resolvedName,
+            relation:      "Member",
+            dob:           profile?.dob           ?? null,
+            gender:        profile?.gender         ?? null,
+            blood_group:   profile?.blood_group    ?? null,
+            avatar_url:    profile?.avatar_url     ?? null,
+            height_cm:     profile?.height_cm      ?? null,
+            weight_kg:     profile?.weight_kg      ?? null,
+            medical_notes: profile?.medical_notes  ?? null,
+          });
+
+        if (insertErr) {
+          Alert.alert("Error", `Could not add member: ${insertErr.message}`);
+          setAccepting(false);
+          return;
+        }
+      }
+
+      // 2. Mark request approved — removes it from the pending list
+      const { error: statusErr } = await supabase
+        .from("join_requests")
+        .update({ status: "approved" })
+        .eq("id", req.id);
+
+      if (statusErr) {
+        // Member was added but status stuck — log and continue so UX isn't broken
+        console.error("join_request status update failed:", statusErr.message);
+      }
+
+      dismiss();
+      onHandled(); // re-fetches pending requests + members list
+    } catch (err: any) {
+      Alert.alert("Error", err?.message ?? "Something went wrong.");
+    } finally {
+      setAccepting(false);
+    }
+  };
+
+  // ── Radio row ────────────────────────────────────────────────────────────────
+  const RadioRow = ({
+    id,
+    label,
+    sub,
+    avatarUrl,
+    onSelect,
+  }: {
+    id: string | null;
+    label: string;
+    sub: string;
+    avatarUrl?: string | null;
+    onSelect: () => void;
+  }) => {
+    const selected = selId === id;
     return (
-      <BottomSheetModal
-        ref={innerRef}
-        snapPoints={snapPoints}
-        enablePanDownToClose
-        backgroundStyle={{ backgroundColor: "#FFFFFF" }}
-        handleIndicatorStyle={{ backgroundColor: "#E5E7EB", width: 40 }}
+      <TouchableOpacity
+        onPress={onSelect}
+        activeOpacity={0.8}
+        style={{
+          flexDirection: "row", alignItems: "center",
+          backgroundColor: selected ? "#F0FAF9" : "#FFF",
+          borderRadius: 16, padding: 14, marginBottom: 10,
+          borderWidth: selected ? 2 : 1, borderColor: selected ? "#069594" : "#E5E7EB", gap: 14,
+        }}
       >
-        <BottomSheetScrollView
-          contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 48 }}
-          keyboardShouldPersistTaps="handled"
-        >
-          {/* ── Sheet Header ── */}
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: "center",
-              paddingTop: 8,
-              marginBottom: 20,
-            }}
-          >
-            <Typography variant="h3" color="heading">
-              Join Request
+        <View style={{ width: 52, height: 52, borderRadius: 26, overflow: "hidden", backgroundColor: "#E0F4F4", alignItems: "center", justifyContent: "center" }}>
+          {avatarUrl
+            ? <Image source={{ uri: avatarUrl }} style={{ width: 52, height: 52 }} />
+            : <Typography variant="body" color="primary" className="font-bold" style={{ fontSize: 16 }}>{getInitials(label)}</Typography>
+          }
+        </View>
+        <View style={{ flex: 1 }}>
+          <Typography variant="body" color="heading" className="font-bold" style={{ fontSize: 16 }}>{label}</Typography>
+          <Typography variant="body-small" color="secondary">{sub}</Typography>
+          {selected && id !== null && (
+            <Typography variant="body-small" color="primary" style={{ fontSize: 11, marginTop: 3 }}>
+              ✓ Their profile data will replace this record
             </Typography>
-            <TouchableOpacity
-              onPress={dismiss}
-              style={{
-                width: 32, height: 32, borderRadius: 16,
-                backgroundColor: "#F3F4F6",
-                alignItems: "center", justifyContent: "center",
-              }}
-            >
-              <X size={16} color="#6B7280" />
-            </TouchableOpacity>
-          </View>
-
-          {/* ── Requester Banner ── */}
-          {request && (
-            <View
-              style={{
-                backgroundColor: "#F0FAF9",
-                borderRadius: 18,
-                padding: 16,
-                marginBottom: 24,
-                borderWidth: 1,
-                borderColor: "#A3D6D5",
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 14,
-              }}
-            >
-              <View
-                style={{
-                  width: 54, height: 54, borderRadius: 27,
-                  backgroundColor: "#069594",
-                  alignItems: "center", justifyContent: "center",
-                }}
-              >
-                <Typography variant="body" color="white" className="font-bold" style={{ fontSize: 18 }}>
-                  {getInitials(request.requester_name)}
-                </Typography>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Typography variant="body" color="heading" className="font-bold" style={{ fontSize: 17 }}>
-                  {request.requester_name}
-                </Typography>
-                <Typography variant="body-small" color="secondary">
-                  wants to join your family
-                </Typography>
-                <Typography variant="body-small" color="secondary" style={{ marginTop: 2 }}>
-                  {new Date(request.created_at).toLocaleDateString("en-IN", {
-                    day: "numeric", month: "short", year: "numeric",
-                  })}
-                </Typography>
-              </View>
-            </View>
           )}
+        </View>
+        <View style={{
+          width: 26, height: 26, borderRadius: 13,
+          backgroundColor: selected ? "#069594" : "#F3F4F6",
+          alignItems: "center", justifyContent: "center",
+          borderWidth: selected ? 0 : 1, borderColor: "#E5E7EB",
+        }}>
+          {selected && <Check size={14} color="#FFF" strokeWidth={3} />}
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
-          {/* ── Question ── */}
-          <Typography variant="body" color="heading" className="font-bold" style={{ marginBottom: 4 }}>
-            Who is this person in your family?
-          </Typography>
-          <Typography variant="body-small" color="secondary" style={{ marginBottom: 18, lineHeight: 20 }}>
-            Select the matching member below — or choose "None of these" to add them as a new member.
-          </Typography>
+  return (
+    <BottomSheetModal
+      ref={innerRef}
+      snapPoints={snapPoints}
+      enablePanDownToClose
+      backgroundStyle={{ backgroundColor: "#FFF" }}
+      handleIndicatorStyle={{ backgroundColor: "#E5E7EB", width: 40 }}
+    >
+      <BottomSheetScrollView
+        contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 48 }}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Header */}
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 8, marginBottom: 20 }}>
+          <Typography variant="h3" color="heading">Join Request</Typography>
+          <TouchableOpacity onPress={dismiss} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center" }}>
+            <X size={16} color="#6B7280" />
+          </TouchableOpacity>
+        </View>
 
-          {loadingOptions ? (
-            <ActivityIndicator color="#069594" style={{ marginVertical: 32 }} />
-          ) : (
-            <>
-              {/* ── Member Options ── */}
-              {memberOptions.map((member) => {
-                const isSelected = selectedId === member.id;
-                const age = getAge(member.dob);
+        {/* Requester banner */}
+        {req && (
+          <View style={{ backgroundColor: "#F0FAF9", borderRadius: 18, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: "#A3D6D5", flexDirection: "row", alignItems: "center", gap: 14 }}>
+            <View style={{ width: 54, height: 54, borderRadius: 27, backgroundColor: "#069594", alignItems: "center", justifyContent: "center" }}>
+              <Typography variant="body" color="white" className="font-bold" style={{ fontSize: 18 }}>
+                {getInitials(req.requester_name || "?")}
+              </Typography>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Typography variant="body" color="heading" className="font-bold" style={{ fontSize: 17 }}>{req.requester_name}</Typography>
+              <Typography variant="body-small" color="secondary">wants to join your family</Typography>
+              <Typography variant="body-small" color="secondary" style={{ marginTop: 2 }}>
+                {new Date(req.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+              </Typography>
+            </View>
+          </View>
+        )}
 
-                return (
-                  <TouchableOpacity
-                    key={member.id}
-                    onPress={() => setSelectedId(isSelected ? null : member.id)}
-                    activeOpacity={0.8}
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      backgroundColor: isSelected ? "#F0FAF9" : "#FFFFFF",
-                      borderRadius: 16,
-                      padding: 14,
-                      marginBottom: 10,
-                      borderWidth: isSelected ? 2 : 1,
-                      borderColor: isSelected ? "#069594" : "#E5E7EB",
-                      gap: 14,
-                    }}
-                  >
-                    {/* Avatar */}
-                    <View style={{ width: 52, height: 52, borderRadius: 26, overflow: "hidden", flexShrink: 0 }}>
-                      {member.avatar_url ? (
-                        <Image source={{ uri: member.avatar_url }} style={{ width: 52, height: 52 }} />
-                      ) : (
-                        <View
-                          style={{
-                            width: 52, height: 52,
-                            backgroundColor: "#E0F4F4",
-                            alignItems: "center", justifyContent: "center",
-                          }}
-                        >
-                          <Typography variant="body" color="primary" className="font-bold" style={{ fontSize: 16 }}>
-                            {getInitials(member.full_name)}
-                          </Typography>
-                        </View>
-                      )}
-                    </View>
+        <Typography variant="body" color="heading" className="font-bold" style={{ marginBottom: 4 }}>
+          Who is this person in your family?
+        </Typography>
+        <Typography variant="body-small" color="secondary" style={{ marginBottom: 18, lineHeight: 20 }}>
+          Select a member to link their account and replace the profile with their real data — or "None of these" to add fresh.
+        </Typography>
 
-                    {/* Info */}
-                    <View style={{ flex: 1 }}>
-                      <Typography variant="body" color="heading" className="font-bold" style={{ fontSize: 16 }}>
-                        {member.full_name}
-                      </Typography>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 3 }}>
-                        <Typography variant="body-small" color="secondary">
-                          {member.relation || "Member"}
-                        </Typography>
-                        {age !== null && (
-                          <Typography variant="body-small" color="secondary">· {age} yrs</Typography>
-                        )}
-                        {member.blood_group && (
-                          <View style={{ backgroundColor: "#FEF2F2", paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4 }}>
-                            <Typography variant="body-small" className="font-bold" style={{ fontSize: 11, color: "#DC2626" }}>
-                              {member.blood_group}
-                            </Typography>
-                          </View>
-                        )}
-                      </View>
-                    </View>
+        {loading ? (
+          <ActivityIndicator color="#069594" style={{ marginVertical: 32 }} />
+        ) : (
+          <>
+            {/* Existing member options */}
+            {options.map((m) => {
+              const a = getAge(m.dob);
+              const sub = [m.relation || "Member", a ? `${a} yrs` : null, m.blood_group]
+                .filter(Boolean).join(" · ");
+              return (
+                <RadioRow
+                  key={m.id}
+                  id={m.id}
+                  label={m.full_name}
+                  sub={sub}
+                  avatarUrl={m.avatar_url}
+                  onSelect={() => setSelId(selId === m.id ? null : m.id)}
+                />
+              );
+            })}
 
-                    {/* Radio */}
-                    <View
-                      style={{
-                        width: 26, height: 26, borderRadius: 13,
-                        backgroundColor: isSelected ? "#069594" : "#F3F4F6",
-                        alignItems: "center", justifyContent: "center",
-                        borderWidth: isSelected ? 0 : 1,
-                        borderColor: "#E5E7EB",
-                      }}
-                    >
-                      {isSelected && <Check size={14} color="#FFFFFF" strokeWidth={3} />}
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
+            {/* None of these */}
+            <View style={{ marginBottom: 28 }}>
+              <RadioRow
+                id={null}
+                label="None of these"
+                sub="Add as a brand-new family member"
+                onSelect={() => setSelId(null)}
+              />
+            </View>
 
-              {/* ── None of These ── */}
+            {/* Action buttons */}
+            <View style={{ gap: 10 }}>
               <TouchableOpacity
-                onPress={() => setSelectedId(null)}
-                activeOpacity={0.8}
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  backgroundColor: selectedId === null ? "#F0FAF9" : "#FFFFFF",
-                  borderRadius: 16,
-                  padding: 14,
-                  marginBottom: 28,
-                  borderWidth: selectedId === null ? 2 : 1,
-                  borderColor: selectedId === null ? "#069594" : "#E5E7EB",
-                  gap: 14,
-                }}
+                onPress={handleAccept}
+                disabled={accepting || denying}
+                activeOpacity={0.88}
+                style={{ height: 56, borderRadius: 9999, backgroundColor: "#069594", alignItems: "center", justifyContent: "center", opacity: accepting || denying ? 0.7 : 1 }}
               >
-                <View
-                  style={{
-                    width: 52, height: 52, borderRadius: 26,
-                    backgroundColor: "#F3F4F6",
-                    alignItems: "center", justifyContent: "center",
-                  }}
-                >
-                  <UserPlus size={22} color="#6B7280" strokeWidth={1.8} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Typography variant="body" color="heading" className="font-bold" style={{ fontSize: 16 }}>
-                    None of these
-                  </Typography>
-                  <Typography variant="body-small" color="secondary">
-                    Add as a new family member
-                  </Typography>
-                </View>
-                <View
-                  style={{
-                    width: 26, height: 26, borderRadius: 13,
-                    backgroundColor: selectedId === null ? "#069594" : "#F3F4F6",
-                    alignItems: "center", justifyContent: "center",
-                    borderWidth: selectedId === null ? 0 : 1,
-                    borderColor: "#E5E7EB",
-                  }}
-                >
-                  {selectedId === null && <Check size={14} color="#FFFFFF" strokeWidth={3} />}
-                </View>
+                {accepting
+                  ? <ActivityIndicator color="#FFF" />
+                  : <Typography variant="button" color="white" className="font-bold" style={{ fontSize: 16 }}>
+                      {selId ? "✓  Accept & Replace Profile" : "✓  Accept & Add to Family"}
+                    </Typography>
+                }
               </TouchableOpacity>
 
-              {/* ── Action Buttons ── */}
-              <View style={{ gap: 10 }}>
-                {/* Accept */}
-                <TouchableOpacity
-                  onPress={handleAccept}
-                  disabled={accepting || denying}
-                  activeOpacity={0.88}
-                  style={{
-                    height: 56,
-                    borderRadius: 9999,
-                    backgroundColor: "#069594",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    opacity: accepting || denying ? 0.7 : 1,
-                  }}
-                >
-                  {accepting ? (
-                    <ActivityIndicator color="#FFFFFF" />
-                  ) : (
-                    <Typography variant="button" color="white" className="font-bold" style={{ fontSize: 16 }}>
-                      ✓ Accept & Add to Family
-                    </Typography>
-                  )}
-                </TouchableOpacity>
-
-                {/* Deny */}
-                <TouchableOpacity
-                  onPress={handleDeny}
-                  disabled={accepting || denying}
-                  activeOpacity={0.88}
-                  style={{
-                    height: 56,
-                    borderRadius: 9999,
-                    backgroundColor: "#FEF2F2",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    borderWidth: 1,
-                    borderColor: "#FECACA",
-                    opacity: accepting || denying ? 0.7 : 1,
-                  }}
-                >
-                  {denying ? (
-                    <ActivityIndicator color="#DC2626" />
-                  ) : (
-                    <Typography variant="button" className="font-bold" style={{ fontSize: 16, color: "#DC2626" }}>
-                      ✕ Deny Request
-                    </Typography>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </>
-          )}
-        </BottomSheetScrollView>
-      </BottomSheetModal>
-    );
-  }
-);
+              <TouchableOpacity
+                onPress={handleDeny}
+                disabled={accepting || denying}
+                activeOpacity={0.88}
+                style={{ height: 56, borderRadius: 9999, backgroundColor: "#FEF2F2", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#FECACA", opacity: accepting || denying ? 0.7 : 1 }}
+              >
+                {denying
+                  ? <ActivityIndicator color="#DC2626" />
+                  : <Typography variant="button" className="font-bold" style={{ fontSize: 16, color: "#DC2626" }}>✕  Deny Request</Typography>
+                }
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
+      </BottomSheetScrollView>
+    </BottomSheetModal>
+  );
+});
 
 JoinRequestSheet.displayName = "JoinRequestSheet";
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function ManageFamilyScreen() {
-  const [activeNav, setActiveNav]         = useState("home");
-  const [joinRequests, setJoinRequests]   = useState<JoinRequest[]>([]);
+  const [activeNav,       setActiveNav]       = useState("home");
+  const [joinRequests,    setJoinRequests]    = useState<JoinRequest[]>([]);
   const [requestsLoading, setRequestsLoading] = useState(true);
 
-  const addMemberSheetRef    = useRef<BottomSheetModal>(null);
-  const joinRequestSheetRef  = useRef<JoinRequestSheetRef>(null);
+  const addMemberRef   = useRef<BottomSheetModal>(null);
+  const joinRequestRef = useRef<SheetRef>(null);
 
-  const { members, familyId, inviteCode, familyName, loading, refetch } = useFamilyMembers();
+  const { members, familyId, inviteCode, familyName, loading, isAdmin, refetch } = useFamilyMembers();
 
-  // ── Fetch join requests ──
+  // Only ever fetch PENDING requests — approved/rejected stay off-screen
   const fetchJoinRequests = useCallback(async (fid: string) => {
     setRequestsLoading(true);
     const { data, error } = await supabase
       .from("join_requests")
       .select("id, family_id, user_id, requester_name, status, created_at, mapped_member_id")
       .eq("family_id", fid)
+      .eq("status", "pending")
       .order("created_at", { ascending: false });
 
-    if (error) console.error("Failed to fetch join requests", error);
+    if (error) console.error("[fetchJoinRequests]", error);
     setJoinRequests((data as JoinRequest[]) || []);
     setRequestsLoading(false);
   }, []);
 
   useEffect(() => {
-    if (familyId) fetchJoinRequests(familyId);
-    else setRequestsLoading(false);
-  }, [familyId, fetchJoinRequests]);
+    if (familyId && isAdmin) fetchJoinRequests(familyId);
+    else { setJoinRequests([]); setRequestsLoading(false); }
+  }, [familyId, isAdmin, fetchJoinRequests]);
 
-  // ── Handlers ──
-  const handleCardPress = (request: JoinRequest) => {
-    joinRequestSheetRef.current?.openWithRequest(request);
-  };
-
-  const handleRequestHandled = async () => {
+  // Called after accept or deny — re-fetches both pending requests and members
+  const handleRequestHandled = useCallback(async () => {
     if (familyId) await fetchJoinRequests(familyId);
     await refetch();
-  };
+  }, [familyId, fetchJoinRequests, refetch]);
 
   return (
-    <SafeAreaView
-      style={{
-        flex: 1,
-        backgroundColor: "#F2F5F7",
-        paddingTop: Platform.OS === "android" ? StatusBar.currentHeight : 0,
-      }}
-    >
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#F2F5F7", paddingTop: Platform.OS === "android" ? StatusBar.currentHeight : 0 }}>
       <StatusBar barStyle="dark-content" backgroundColor="#F2F5F7" />
 
-      {/* ── Header ── */}
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          paddingHorizontal: 24,
-          paddingTop: 16,
-          paddingBottom: 6,
-          gap: 12,
-        }}
-      >
+      {/* Header */}
+      <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 24, paddingTop: 16, paddingBottom: 6, gap: 12 }}>
         <TouchableOpacity activeOpacity={0.7}>
           <ArrowLeft size={22} color="#1A2B4B" strokeWidth={2.3} />
         </TouchableOpacity>
         <Typography variant="h3" color="heading">
-          Manage Family
+          {isAdmin ? "Manage Family" : "My Family"}
         </Typography>
       </View>
 
-      {/* ── Scrollable Content ── */}
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 16, paddingBottom: 130 }}
@@ -694,152 +498,90 @@ export default function ManageFamilyScreen() {
           <ActivityIndicator size="large" color="#069594" style={{ marginTop: 40 }} />
         ) : (
           <>
-            {/* Invite Code Banner */}
-            {inviteCode ? (
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  backgroundColor: "#E0F4F4",
-                  padding: 16,
-                  borderRadius: 16,
-                  marginBottom: 24,
-                  borderWidth: 1,
-                  borderColor: "#A3D6D5",
-                }}
-              >
+            {/* ── Admin only: invite code ── */}
+            {isAdmin && inviteCode ? (
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#E0F4F4", padding: 16, borderRadius: 16, marginBottom: 24, borderWidth: 1, borderColor: "#A3D6D5" }}>
                 <View>
-                  <Typography variant="body-small" color="primary" className="font-bold mb-1 uppercase tracking-wider">
-                    Family Invite Code
-                  </Typography>
-                  <Typography variant="h3" color="heading" style={{ letterSpacing: 2 }}>
-                    {inviteCode}
-                  </Typography>
+                  <Typography variant="body-small" color="primary" className="font-bold mb-1 uppercase tracking-wider">Family Invite Code</Typography>
+                  <Typography variant="h3" color="heading" style={{ letterSpacing: 2 }}>{inviteCode}</Typography>
                 </View>
                 <TouchableOpacity
                   activeOpacity={0.7}
-                  style={{
-                    backgroundColor: "#069594",
-                    paddingHorizontal: 14,
-                    paddingVertical: 10,
-                    borderRadius: 10,
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 6,
-                  }}
                   onPress={() => console.log("Copied:", inviteCode)}
+                  style={{ backgroundColor: "#069594", paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, flexDirection: "row", alignItems: "center", gap: 6 }}
                 >
-                  <Copy size={16} color="#FFFFFF" />
+                  <Copy size={16} color="#FFF" />
                   <Typography variant="body-small" color="white" className="font-bold">Copy</Typography>
                 </TouchableOpacity>
               </View>
             ) : null}
 
-            {/* Join Requests Section */}
-            <View style={{ marginBottom: 6 }}>
-              <Typography variant="body-small" color="primary" className="font-bold mb-2 uppercase tracking-wider">
-                Join Requests
-              </Typography>
+            {/* ── Admin only: pending join requests ── */}
+            {isAdmin && (
+              <View style={{ marginBottom: 6 }}>
+                <Typography variant="body-small" color="primary" className="font-bold mb-2 uppercase tracking-wider">
+                  Join Requests
+                </Typography>
+                {requestsLoading ? (
+                  <View style={{ backgroundColor: "#FFF", borderRadius: 18, padding: 16, borderWidth: 1, borderColor: "#E5E7EB", marginBottom: 18 }}>
+                    <Typography variant="body-small" color="secondary">Loading requests...</Typography>
+                  </View>
+                ) : joinRequests.length > 0 ? (
+                  joinRequests.map((r) => (
+                    <JoinRequestCard
+                      key={r.id}
+                      req={r}
+                      onPress={(req) => joinRequestRef.current?.openWithRequest(req)}
+                    />
+                  ))
+                ) : (
+                  <View style={{ backgroundColor: "#FFF", borderRadius: 18, padding: 16, borderWidth: 1, borderColor: "#E5E7EB", marginBottom: 18 }}>
+                    <Typography variant="body-small" color="secondary">No pending join requests right now.</Typography>
+                  </View>
+                )}
+              </View>
+            )}
 
-              {requestsLoading ? (
-                <View style={{ backgroundColor: "#FFFFFF", borderRadius: 18, padding: 16, borderWidth: 1, borderColor: "#E5E7EB", marginBottom: 18 }}>
-                  <Typography variant="body-small" color="secondary">Loading requests...</Typography>
-                </View>
-              ) : joinRequests.length > 0 ? (
-                joinRequests.map((request) => (
-                  <JoinRequestCard key={request.id} request={request} onPress={handleCardPress} />
-                ))
-              ) : (
-                <View style={{ backgroundColor: "#FFFFFF", borderRadius: 18, padding: 16, borderWidth: 1, borderColor: "#E5E7EB", marginBottom: 18 }}>
-                  <Typography variant="body-small" color="secondary">No pending join requests right now.</Typography>
-                </View>
-              )}
-            </View>
-
-            {/* Members Count */}
+            {/* Members list — all users see this */}
             <Typography variant="body" color="secondary" className="mb-6 font-medium">
               {members.length} members in {familyName || "your family"}
             </Typography>
-
-            {/* Member Cards */}
             {members.map((m) => (
-              <MemberCard key={m.id} member={m} />
+              <MemberCard key={m.id} m={m} />
             ))}
 
-            {/* Add New Member */}
-            <TouchableOpacity
-              onPress={() => addMemberSheetRef.current?.present()}
-              activeOpacity={0.8}
-              style={{
-                borderWidth: 2,
-                borderStyle: "dashed",
-                borderColor: "#A3D6D5",
-                backgroundColor: "#F4FAFA",
-                borderRadius: 20,
-                paddingVertical: 28,
-                alignItems: "center",
-                justifyContent: "center",
-                marginTop: 10,
-              }}
-            >
-              <View
-                style={{
-                  width: 44, height: 44, borderRadius: 9999,
-                  backgroundColor: "#069594",
-                  alignItems: "center", justifyContent: "center",
-                  marginBottom: 10,
-                  shadowColor: "#069594",
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.28, shadowRadius: 8, elevation: 5,
-                }}
+            {/* ── Admin only: add member ── */}
+            {isAdmin && (
+              <TouchableOpacity
+                onPress={() => addMemberRef.current?.present()}
+                activeOpacity={0.8}
+                style={{ borderWidth: 2, borderStyle: "dashed", borderColor: "#A3D6D5", backgroundColor: "#F4FAFA", borderRadius: 20, paddingVertical: 28, alignItems: "center", marginTop: 10 }}
               >
-                <Plus size={22} color="#FFFFFF" strokeWidth={2.5} />
-              </View>
-              <Typography variant="body" color="primary" className="font-bold">+ Add New Member</Typography>
-            </TouchableOpacity>
+                <View style={{ width: 44, height: 44, borderRadius: 9999, backgroundColor: "#069594", alignItems: "center", justifyContent: "center", marginBottom: 10, shadowColor: "#069594", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.28, shadowRadius: 8, elevation: 5 }}>
+                  <Plus size={22} color="#FFF" strokeWidth={2.5} />
+                </View>
+                <Typography variant="body" color="primary" className="font-bold">+ Add New Member</Typography>
+              </TouchableOpacity>
+            )}
           </>
         )}
       </ScrollView>
 
-      {/* ── Bottom Navigation ── */}
-      <View
-        style={{
-          position: "absolute", bottom: 0, left: 0, right: 0,
-          backgroundColor: "#FFFFFF",
-          borderTopWidth: 1, borderTopColor: "#E5E7EB",
-          flexDirection: "row", alignItems: "flex-end",
-          paddingBottom: Platform.OS === "ios" ? 24 : 12,
-          paddingTop: 10,
-          shadowColor: "#000", shadowOffset: { width: 0, height: -4 },
-          shadowOpacity: 0.07, shadowRadius: 12, elevation: 20, zIndex: 50,
-        }}
-      >
+      {/* Bottom nav */}
+      <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: "#FFF", borderTopWidth: 1, borderTopColor: "#E5E7EB", flexDirection: "row", alignItems: "flex-end", paddingBottom: Platform.OS === "ios" ? 24 : 12, paddingTop: 10, shadowColor: "#000", shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.07, shadowRadius: 12, elevation: 20, zIndex: 50 }}>
         {NAV.slice(0, 2).map((item) => {
           const active = activeNav === item.id;
           return (
             <TouchableOpacity key={item.id} onPress={() => setActiveNav(item.id)} activeOpacity={0.7} style={{ flex: 1, alignItems: "center" }}>
               {item.icon(active)}
-              <Typography variant="body-small" color={active ? "primary" : "secondary"} className={active ? "font-bold mt-1" : "mt-1"} style={{ fontSize: 10 }}>
-                {item.label}
-              </Typography>
+              <Typography variant="body-small" color={active ? "primary" : "secondary"} className={active ? "font-bold mt-1" : "mt-1"} style={{ fontSize: 10 }}>{item.label}</Typography>
             </TouchableOpacity>
           );
         })}
 
         <View style={{ flex: 1, alignItems: "center" }}>
-          <TouchableOpacity
-            activeOpacity={0.85}
-            style={{
-              width: 62, height: 62, borderRadius: 9999,
-              backgroundColor: "#069594",
-              alignItems: "center", justifyContent: "center",
-              marginTop: -30, borderWidth: 4, borderColor: "#FFFFFF",
-              shadowColor: "#069594", shadowOffset: { width: 0, height: 8 },
-              shadowOpacity: 0.38, shadowRadius: 14, elevation: 14,
-            }}
-          >
-            <BriefcaseMedical size={26} color="#FFFFFF" strokeWidth={2} />
+          <TouchableOpacity activeOpacity={0.85} style={{ width: 62, height: 62, borderRadius: 9999, backgroundColor: "#069594", alignItems: "center", justifyContent: "center", marginTop: -30, borderWidth: 4, borderColor: "#FFF", shadowColor: "#069594", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.38, shadowRadius: 14, elevation: 14 }}>
+            <BriefcaseMedical size={26} color="#FFF" strokeWidth={2} />
           </TouchableOpacity>
           <Typography variant="body-small" color="secondary" className="mt-1" style={{ fontSize: 10 }}>Consult</Typography>
         </View>
@@ -849,26 +591,19 @@ export default function ManageFamilyScreen() {
           return (
             <TouchableOpacity key={item.id} onPress={() => setActiveNav(item.id)} activeOpacity={0.7} style={{ flex: 1, alignItems: "center" }}>
               {item.icon(active)}
-              <Typography variant="body-small" color={active ? "primary" : "secondary"} className={active ? "font-bold mt-1" : "mt-1"} style={{ fontSize: 10 }}>
-                {item.label}
-              </Typography>
+              <Typography variant="body-small" color={active ? "primary" : "secondary"} className={active ? "font-bold mt-1" : "mt-1"} style={{ fontSize: 10 }}>{item.label}</Typography>
             </TouchableOpacity>
           );
         })}
       </View>
 
-      {/* ── Bottom Sheets ── */}
-      <AddMemberBottomSheet
-        ref={addMemberSheetRef}
-        familyId={familyId}
-        onMemberAdded={refetch}
-      />
-
-      <JoinRequestSheet
-        ref={joinRequestSheetRef}
-        familyId={familyId}
-        onHandled={handleRequestHandled}
-      />
+      {/* Sheets — admin only */}
+      {isAdmin && (
+        <>
+          <AddMemberBottomSheet ref={addMemberRef} familyId={familyId} onMemberAdded={refetch} />
+          <JoinRequestSheet ref={joinRequestRef} familyId={familyId} onHandled={handleRequestHandled} />
+        </>
+      )}
     </SafeAreaView>
   );
 }

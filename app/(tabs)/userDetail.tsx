@@ -107,74 +107,101 @@ export default function ProfileDetails() {
   }, [loadProfile]);
 
 
-   const fetchRequest = async (inviteCode: string) => {
-  const { data: authData, error } = await supabase.auth.getUser();
-  if (!authData.user) {
-    setJoinMessage("You must be logged in.");
-    setJoinMessageIsError(true);
-    return;
-  }
+   // Drop-in replacement for the fetchRequest function in userDetail.tsx
+// Always reads requester_name from user_profiles at request time,
+// so it's never stale even if the user updated their name.
 
-  // ✅ Guard: check if user already belongs to any family
-  const { data: existingMembership } = await supabase
-    .from("family_members")
-    .select("id")
-    .eq("user_id", authData.user.id)
-    .maybeSingle();
-
-  if (existingMembership) {
-    setJoinMessage("You already belong to a family.");
-    setJoinMessageIsError(true);
-    return;
-  }
-
-  const { data: families, error: famError } = await supabase
-    .from("families")
-    .select("id")
-    .eq("invite_code", inviteCode)
-    .maybeSingle();
-
-  if (!families?.id) {
-    setJoinMessage("Invalid invite code. Please check and try again.");
-    setJoinMessageIsError(true);
-    return;
-  }
-
-  // ✅ Guard: check if a pending request already exists
-  const { data: existingRequest } = await supabase
-    .from("join_requests")
-    .select("id")
-    .eq("family_id", families.id)
-    .eq("user_id", authData.user.id)
-    .maybeSingle();
-
-  if (existingRequest) {
-    setJoinMessage("You already sent a request to this family.");
-    setJoinMessageIsError(true);
-    return;
-  }
-
-  const { error: insertError } = await supabase
-    .from("join_requests")
-    .insert({
-      family_id: families.id,
-      user_id: authData.user.id,
-      status: "pending",
-      mapped_member_id: null,           // ✅ no hardcoded UUID
-      requester_name: fullName || "Unknown",
-    });
-
-  if (insertError) {
-    setJoinMessage("Failed to send request. Please try again.");
-    setJoinMessageIsError(true);
-    return;
-  }
-
-  setJoinMessage("Join request sent! Waiting for family admin to approve.");
+const fetchRequest = async (inviteCode: string) => {
+  setJoinLoading(true);
+  setJoinMessage("");
   setJoinMessageIsError(false);
-  setInviteCode("");
-};
 
+  try {
+    // 1. Auth check
+    const { data: authData } = await supabase.auth.getUser();
+    if (!authData.user) {
+      setJoinMessage("You must be logged in.");
+      setJoinMessageIsError(true);
+      return;
+    }
+
+    // 2. Guard: already a member of any family
+    const { data: existingMembership } = await supabase
+      .from("family_members")
+      .select("id")
+      .eq("user_id", authData.user.id)
+      .maybeSingle();
+
+    if (existingMembership) {
+      setJoinMessage("You already belong to a family.");
+      setJoinMessageIsError(true);
+      return;
+    }
+
+    // 3. Resolve invite code → family
+    const { data: family } = await supabase
+      .from("families")
+      .select("id")
+      .eq("invite_code", inviteCode.trim().toUpperCase())
+      .maybeSingle();
+
+    if (!family?.id) {
+      setJoinMessage("Invalid invite code. Please check and try again.");
+      setJoinMessageIsError(true);
+      return;
+    }
+
+    // 4. Guard: pending request already exists for this family
+    const { data: existingRequest } = await supabase
+      .from("join_requests")
+      .select("id")
+      .eq("family_id", family.id)
+      .eq("user_id", authData.user.id)
+      .maybeSingle();
+
+    if (existingRequest) {
+      setJoinMessage("You already sent a request to this family.");
+      setJoinMessageIsError(true);
+      return;
+    }
+
+    // 5. Always read the freshest name from user_profiles
+    //    (never rely on local state which may be mid-edit or stale)
+    const { data: profile } = await supabase
+      .from("user_profiles")
+      .select("full_name")
+      .eq("id", authData.user.id)
+      .maybeSingle();
+
+    const requesterName =
+      profile?.full_name?.trim() ||   // ← always fresh from DB
+      fullName.trim() ||               // ← fallback: current input field value
+      "Unknown";
+
+    // 6. Insert join request with the freshest name
+    const { error: insertError } = await supabase
+      .from("join_requests")
+      .insert({
+        family_id:      family.id,
+        user_id:        authData.user.id,
+        status:         "pending",
+        mapped_member_id: null,
+        requester_name: requesterName,
+      });
+
+    if (insertError) {
+      setJoinMessage("Failed to send request. Please try again.");
+      setJoinMessageIsError(true);
+      return;
+    }
+
+    setJoinMessage("Join request sent! Waiting for family admin to approve.");
+    setJoinMessageIsError(false);
+    setInviteCode("");
+  } finally {
+    setJoinLoading(false);
+  }
+};
 
   const handleAvatarPick = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
