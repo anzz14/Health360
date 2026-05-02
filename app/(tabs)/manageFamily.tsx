@@ -117,8 +117,6 @@ const getAge = (dob: string | null): number | null => {
 
 // ─── Member Card ─────────────────────────────────────────────────────────────
 
-// ─── Member Card ─────────────────────────────────────────────────────────────
-
 const MemberCard = ({
   m,
   isAdmin,
@@ -370,7 +368,6 @@ const JoinRequestSheet = React.forwardRef<SheetRef, SheetProps>(
 
     const [req, setReq] = useState<JoinRequest | null>(null);
     const [options, setOptions] = useState<MemberOption[]>([]);
-    // null = "None of these" → create new; string = existing member id → overwrite
     const [selId, setSelId] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [accepting, setAccepting] = useState(false);
@@ -380,7 +377,7 @@ const JoinRequestSheet = React.forwardRef<SheetRef, SheetProps>(
       ...(innerRef.current as any),
       openWithRequest: async (r: JoinRequest) => {
         setReq(r);
-        setSelId(null); // always start unselected — admin must consciously choose
+        setSelId(null);
         setLoading(true);
         const { data } = await supabase
           .from("family_members")
@@ -415,113 +412,47 @@ const JoinRequestSheet = React.forwardRef<SheetRef, SheetProps>(
     };
 
     // ── Accept ───────────────────────────────────────────────────────────────────
-    /**
-     * PATH A — selId is set (admin picked an existing family_member stub):
-     *   → Fetch the requester's user_profile (their real data)
-     *   → UPDATE family_members SET (all profile fields + user_id) WHERE id = selId
-     *     This replaces admin's placeholder with the real member's own data
-     *   → UPDATE join_requests SET status = 'approved'
-     *
-     * PATH B — selId is null ("None of these"):
-     *   → INSERT new family_members row from user_profile
-     *   → UPDATE join_requests SET status = 'approved'
-     */
+    //
+    // BUG 1 FIX: Previously used conditional spreads like:
+    //   `...(profile?.dob != null && { dob: profile.dob })`
+    // This left dummy values in place when the real profile field was null.
+    // Now we always overwrite ALL fields unconditionally (using ?? null).
+    //
+    // This also fixes BUG 2: since the family_members DB row is now fully
+    // correct after accept, ALL clients reading that row will see accurate data —
+    // not just the admin who has the in-memory profile merge.
+
+    // ── Accept ───────────────────────────────────────────────────────────────────
+    // Uses a SECURITY DEFINER RPC function so RLS never blocks the profile
+    // read or the family_members update. The server-side function handles
+    // everything atomically: fetch profile → update/insert → delete request.
     const handleAccept = async () => {
       if (!req) return;
       setAccepting(true);
 
       try {
-        // Always fetch the joiner's real profile first
-        const { data: profile, error: profErr } = await supabase
-          .from("user_profiles")
-          .select(
-            "full_name, dob, gender, blood_group, avatar_url, height_cm, weight_kg, medical_notes",
-          )
-          .eq("id", req.user_id)
-          .maybeSingle();
+        const { data, error } = await supabase.rpc("accept_join_request", {
+          p_request_id: req.id,
+          p_member_id:  selId ?? null,   // null → PATH B (insert fresh)
+          p_family_id:  req.family_id,
+          p_user_id:    req.user_id,
+          p_relation:   selId
+            ? (options.find((o) => o.id === selId)?.relation ?? "Member")
+            : "Member",
+        });
 
-        if (profErr)
-          console.warn(
-            "[handleAccept] user_profile fetch warning:",
-            profErr.message,
-          );
+        console.log("[handleAccept] rpc result:", JSON.stringify(data));
+        console.log("[handleAccept] rpc error:", JSON.stringify(error));
 
-        // Real name wins; fall back to what the requester typed when joining
-        const resolvedName =
-          profile?.full_name?.trim() || req.requester_name || "Unknown";
-
-        if (selId) {
-          // PATH A — link to existing stub and overwrite ALL fields with real data.
-          // Spread only non-null profile fields so a sparse profile doesn't blank the stub.
-          const { error: updateErr } = await supabase
-            .from("family_members")
-            .update({
-              user_id: req.user_id,
-              full_name: resolvedName,
-              ...(profile?.dob != null && { dob: profile.dob }),
-              ...(profile?.gender != null && { gender: profile.gender }),
-              ...(profile?.blood_group != null && {
-                blood_group: profile.blood_group,
-              }),
-              ...(profile?.avatar_url != null && {
-                avatar_url: profile.avatar_url,
-              }),
-              ...(profile?.height_cm != null && {
-                height_cm: profile.height_cm,
-              }),
-              ...(profile?.weight_kg != null && {
-                weight_kg: profile.weight_kg,
-              }),
-              ...(profile?.medical_notes != null && {
-                medical_notes: profile.medical_notes,
-              }),
-            })
-            .eq("id", selId);
-
-          if (updateErr) {
-            Alert.alert(
-              "Error",
-              `Could not update member: ${updateErr.message}`,
-            );
-            setAccepting(false);
-            return;
-          }
-        } else {
-          // PATH B — no stub picked; insert a fresh row from real profile data
-          const { error: insertErr } = await supabase
-            .from("family_members")
-            .insert({
-              family_id: req.family_id,
-              user_id: req.user_id,
-              full_name: resolvedName,
-              relation: "Member",
-              dob: profile?.dob ?? null,
-              gender: profile?.gender ?? null,
-              blood_group: profile?.blood_group ?? null,
-              avatar_url: profile?.avatar_url ?? null,
-              height_cm: profile?.height_cm ?? null,
-              weight_kg: profile?.weight_kg ?? null,
-              medical_notes: profile?.medical_notes ?? null,
-            });
-
-          if (insertErr) {
-            Alert.alert("Error", `Could not add member: ${insertErr.message}`);
-            setAccepting(false);
-            return;
-          }
+        if (error) {
+          Alert.alert("Error", error.message);
+          return;
         }
 
-        // Delete the request — it's handled
-        const { error: deleteErr } = await supabase
-          .from("join_requests")
-          .delete()
-          .eq("id", req.id);
-
-        if (deleteErr)
-          console.error(
-            "[handleAccept] request delete failed:",
-            deleteErr.message,
-          );
+        if (data?.error) {
+          Alert.alert("Error", data.error);
+          return;
+        }
 
         dismiss();
         onHandled();
@@ -876,7 +807,6 @@ export default function ManageFamilyScreen() {
   } = useFamilyMembers();
   const { kickMember, kicking } = useKickFamilyMember();
 
-  // Only ever fetch PENDING requests — approved/rejected stay off-screen
   const fetchJoinRequests = useCallback(async (fid: string) => {
     setRequestsLoading(true);
     const { data, error } = await supabase
@@ -901,7 +831,6 @@ export default function ManageFamilyScreen() {
     }
   }, [familyId, isAdmin, fetchJoinRequests]);
 
-  // Called after accept or deny — re-fetches both pending requests and members
   const handleRequestHandled = useCallback(async () => {
     if (familyId) await fetchJoinRequests(familyId);
     await refetch();

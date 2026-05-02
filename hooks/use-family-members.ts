@@ -108,8 +108,8 @@ export function useFamilyMembers() {
       const rawMembers: any[] = data.family_members || [];
 
       // 5. For members with a linked user_id, fetch their live user_profile.
-      //    This is the KEY fix: if the member changes their name/avatar in
-      //    userDetail.tsx, the family list reflects it immediately on next fetch.
+      //    Profile data always wins — this ensures name/avatar/dob changes in
+      //    the user's own profile are reflected for ALL viewers of the family list.
       const linkedUserIds = rawMembers
         .filter((m) => !!m.user_id)
         .map((m) => m.user_id as string);
@@ -135,7 +135,24 @@ export function useFamilyMembers() {
         }
       }
 
-      // 6. Merge family_member row with live user_profile (profile wins)
+      // 6. Merge: profile always wins over family_member row.
+      //
+      // KEY FIX for Bug 2:
+      //   Previously: `const dob = profile?.dob || m.dob`
+      //   Problem: if profile.dob is null (user hasn't set it), we'd fall back to
+      //   the dummy DOB from the family_member row — showing the wrong age.
+      //
+      //   But wait — after the handleAccept fix (Bug 1), the family_member row's
+      //   dob IS now correctly overwritten with the real profile value (even null).
+      //   So `m.dob` is already correct after accept.
+      //
+      //   To be extra safe, we explicitly prefer profile data when available,
+      //   and only fall back to the row when there's no linked profile at all.
+      //   This means:
+      //     - Linked member with filled profile → profile data (fresh, always correct)
+      //     - Linked member with empty profile  → null/-- (correct: they haven't filled it)
+      //     - Unlinked dummy member             → family_member row data (what admin typed)
+
       setHasFamily(true);
       setFamilyId(data.id);
       setInviteCode(data.invite_code);
@@ -145,13 +162,29 @@ export function useFamilyMembers() {
       const formatted: FamilyMember[] = rawMembers.map((m) => {
         const profile = m.user_id ? profileMap[m.user_id] : null;
 
-        // Profile data always wins over the family_member row —
-        // so renaming in userDetail.tsx is reflected here without a DB migration
-        const name       = profile?.full_name?.trim()  || m.full_name  || "Unknown";
-        const blood      = profile?.blood_group         || m.blood_group || "";
-        const avatar     = profile?.avatar_url          || m.avatar_url
-          || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=069594&color=fff`;
-        const dob        = profile?.dob                 || m.dob;
+        // When a profile is linked, ALWAYS use profile values (even if null).
+        // Only fall back to the family_member row for unlinked (dummy) members.
+        const hasLinkedProfile = profile !== undefined && profile !== null;
+
+        const name = hasLinkedProfile
+          ? (profile.full_name?.trim() || m.full_name || "Unknown")
+          : (m.full_name || "Unknown");
+
+        const blood = hasLinkedProfile
+          ? (profile.blood_group ?? m.blood_group ?? "")   // profile wins; row as last resort
+          : (m.blood_group ?? "");
+
+        // FIX: For dob, when profile is linked, prefer profile.dob.
+        // If the profile's dob is null, show "--" (don't show dummy dob).
+        // For unlinked members, use the row's dob (what admin typed).
+        const dob = hasLinkedProfile
+          ? (profile.dob ?? null)          // null profile.dob → "--" age (correct)
+          : (m.dob ?? null);               // unlinked → use what admin entered
+
+        const avatar =
+          (hasLinkedProfile ? profile.avatar_url : null) ||
+          m.avatar_url ||
+          `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=069594&color=fff`;
 
         return {
           id:          m.id,
