@@ -1,13 +1,8 @@
-import { Tabs } from "expo-router";
-import { Platform, View, StyleSheet, Text } from "react-native";
 import { HapticTab } from "@/components/haptic-tab";
-import {
-  Home,
-  ClipboardList,
-  ShoppingCart,
-  User,
-} from "lucide-react-native";
 import { BlurView } from "expo-blur";
+import { Tabs } from "expo-router";
+import { ClipboardList, Home, ShoppingCart, User } from "lucide-react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
 
 const TEAL = "#069594";
 const INACTIVE = "#94A3B8";
@@ -75,7 +70,7 @@ export default function TabLayout() {
 
       {/* Records */}
       <Tabs.Screen
-        name="familyInfo"
+        name="records"
         options={{
           title: "Records",
           tabBarIcon: ({ color }) => (
@@ -95,7 +90,7 @@ export default function TabLayout() {
 
       {/* Orders */}
       <Tabs.Screen
-        name="userDetail"
+        name="orders"
         options={{
           title: "Orders",
           tabBarIcon: ({ color }) => (
@@ -110,6 +105,16 @@ export default function TabLayout() {
         options={{
           title: "Profile",
           tabBarIcon: ({ color }) => <TabIcon Icon={User} color={color} />,
+        }}
+      />
+
+      {/* Onboarding — hide tab bar */}
+      <Tabs.Screen
+        name="onboarding"
+        options={{
+          title: "",
+          tabBarStyle: { display: "none" },
+          tabBarItemStyle: { display: "none" },
         }}
       />
     </Tabs>
@@ -138,8 +143,8 @@ const styles = StyleSheet.create({
   tabLabel: {
     fontSize: 10,
     lineHeight: 15,
-    fontWeight: "500",
-    marginTop: 2,
+    fontWeight: "600",
+    marginTop: 1,
   },
   tabItem: {
     flexDirection: "column",
@@ -149,12 +154,11 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
 
-  // FAB styles
   fabWrapper: {
     alignItems: "center",
-    justifyContent: "flex-end",
+    justifyContent: "flex-start",
     width: 56,
-    bottom: 20,
+    bottom: 16,
     position: "relative",
   },
   fabShadow: {
@@ -162,11 +166,11 @@ const styles = StyleSheet.create({
     top: 0,
     width: 56,
     height: 56,
-    borderRadius: 9999,
+    borderRadius: 999,
     backgroundColor: "transparent",
     shadowColor: "#2ECC8B",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.4,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: .5,
     shadowRadius: 15,
     elevation: 10,
   },
@@ -193,7 +197,7 @@ const styles = StyleSheet.create({
     fontWeight: "300",
   },
   fabLabel: {
-    marginTop: 4,
+    marginTop: 6,
     fontSize: 10,
     lineHeight: 15,
     color: INACTIVE,

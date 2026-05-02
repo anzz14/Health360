@@ -877,11 +877,12 @@ export default function ManageFamilyScreen() {
           gap: 12,
         }}
       >
-         <Link href={'/familyCareDashboard'}>
+        
         <TouchableOpacity activeOpacity={0.7}>
+           <Link href={'/familyCareDashboard'}>
           <ArrowLeft size={22} color="#1A2B4B" strokeWidth={2.3} />
+          </Link>
         </TouchableOpacity>
-        </Link>
         <Typography variant="h3" color="heading">
           {isAdmin ? "Manage Family" : "My Family"}
         </Typography>

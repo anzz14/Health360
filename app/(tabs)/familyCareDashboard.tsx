@@ -290,10 +290,12 @@ export default function DashboardScreen() {
                 borderColor: "rgba(6,149,148,0.2)",
               }}
             >
+              <Link href={'/(tabs)/profile'}>
               <Image
-                source={{ uri: "https://i.pravatar.cc/150?img=33" }}
+                source={{ uri: "https://i.pravatar.cc/150?img=12" }}
                 style={{ width: 48, height: 48 }}
               />
+              </Link>
             </View>
             {/* Status dot */}
             <View
@@ -315,14 +317,16 @@ export default function DashboardScreen() {
         {/* ════════════════════════════════════════════════════════════════════
             B. FAMILY MEMBERS
             ════════════════════════════════════════════════════════════════════ */}
+            
         <View className="mt-8">
           {/* Row header */}
           <View className="flex-row justify-between items-center px-6 mb-4">
             <Typography variant="h3" color="heading">
               Family Members
             </Typography>
-            <Link href={'/(tabs)/manageFamily'}>
+           
             <TouchableOpacity activeOpacity={0.7}>
+               <Link href={'/(tabs)/manageFamily'}>
               <Typography
                 variant="body-small"
                 color="primary"
@@ -330,8 +334,9 @@ export default function DashboardScreen() {
               >
                 View All
               </Typography>
+               </Link>
             </TouchableOpacity>
-            </Link>
+           
           </View>
 
           {/* Horizontal scroll — padding-left 24 px, trailing space via paddingRight */}

@@ -110,6 +110,12 @@ export default function LoginScreen() {
               className="mt-2"
             />
 
+ <Link href="/(tabs)/familyCareDashboard">
+                  <Typography variant="body-small" color="primary">
+                    {" "}
+                    Sign Up
+                  </Typography>
+                </Link>
             <View className="items-center mt-4">
               <Typography variant="body-small" color="default">
                 Don't have an account?{" "}
