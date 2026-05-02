@@ -14,7 +14,7 @@ import {
   User,
   Video,
 } from "lucide-react-native";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Image,
   Platform,
@@ -48,13 +48,11 @@ type NavItem = {
   icon: (active: boolean) => React.ReactNode;
 };
 
-// ─── Static Data ──────────────────────────────────────────────────────────────
-const FAMILY: FamilyMember[] = [
-  { id: "me", label: "Me", isMe: true },
-  { id: "mom", label: "Mom", avatar: "https://i.pravatar.cc/150?img=47" },
-  { id: "dad", label: "Dad", avatar: "https://i.pravatar.cc/150?img=12" },
-  { id: "junior", label: "Junior", avatar: "https://i.pravatar.cc/150?img=30" },
-];
+// We'll fetch real members using the shared hook from ManageFamily
+import { useFamilyMembers } from "@/hooks/use-family-members";
+
+// NOTE: We map the hook's `FamilyMember` to the lightweight shape used by
+// the UI to avoid changing MemberCard.
 
 const NAV: NavItem[] = [
   {
@@ -201,6 +199,22 @@ const ActionCard = ({ action }: { action: QuickAction }) => (
 export default function DashboardScreen() {
   const [activeMember, setActiveMember] = useState("me");
   const [activeNav, setActiveNav] = useState("home");
+  const { members } = useFamilyMembers();
+
+  // Map hook members to the compact shape used by the MemberCard
+  const displayMembers: FamilyMember[] = members.map((m) => ({
+    id: m.id,
+    label: m.name,
+    avatar: m.avatar,
+    isMe: m.relation === "Self",
+  }));
+
+  // Ensure there's a sensible default selected member once data loads
+  useEffect(() => {
+    if (!displayMembers || displayMembers.length === 0) return;
+    const ids = displayMembers.map((d) => d.id);
+    if (!ids.includes(activeMember)) setActiveMember(displayMembers[0].id);
+  }, [displayMembers, activeMember]);
 
   const quickActions: QuickAction[] = [
     {
@@ -322,7 +336,7 @@ export default function DashboardScreen() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ paddingHorizontal: 24, gap: 0 }}
           >
-            {FAMILY.map((m) => (
+            {displayMembers.map((m) => (
               <MemberCard
                 key={m.id}
                 member={m}
