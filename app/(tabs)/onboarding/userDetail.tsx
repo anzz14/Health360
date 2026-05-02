@@ -241,7 +241,7 @@ const fetchRequest = async (inviteCode: string) => {
       Alert.alert("Database Error", result.error || "Failed to save profile");
       return;
     }
-    router.replace("/(tabs)/familyInfo");
+    router.replace("/(tabs)/onboarding/familyInfo");
   };
 
   return (

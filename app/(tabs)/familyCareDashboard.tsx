@@ -277,7 +277,7 @@ export default function DashboardScreen() {
               Hello, Alex
             </Typography>
           </View>
-
+ <Link href={'/(tabs)/onboarding/userDetail'}>ss</Link>
           {/* Right: avatar + online dot */}
           <View style={{ position: "relative" }}>
             <View
@@ -290,6 +290,8 @@ export default function DashboardScreen() {
                 borderColor: "rgba(6,149,148,0.2)",
               }}
             >
+
+              
               <Link href={'/(tabs)/profile'}>
               <Image
                 source={{ uri: "https://i.pravatar.cc/150?img=12" }}
