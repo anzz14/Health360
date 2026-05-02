@@ -2,6 +2,7 @@ import { AddMemberBottomSheet } from "@/components/add-member-bottom-sheet";
 import { Typography } from "@/components/typography/typography";
 import { FamilyMember, useFamilyMembers } from "@/hooks/use-family-members";
 import { useKickFamilyMember } from "@/hooks/use-kick-family-member";
+import { Link } from "expo-router";
 
 import { supabase } from "@/lib/supabase";
 import { BottomSheetModal, BottomSheetScrollView } from "@gorhom/bottom-sheet";
@@ -876,9 +877,11 @@ export default function ManageFamilyScreen() {
           gap: 12,
         }}
       >
+         <Link href={'/familyCareDashboard'}>
         <TouchableOpacity activeOpacity={0.7}>
           <ArrowLeft size={22} color="#1A2B4B" strokeWidth={2.3} />
         </TouchableOpacity>
+        </Link>
         <Typography variant="h3" color="heading">
           {isAdmin ? "Manage Family" : "My Family"}
         </Typography>

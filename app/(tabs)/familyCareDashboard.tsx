@@ -50,6 +50,7 @@ type NavItem = {
 
 // We'll fetch real members using the shared hook from ManageFamily
 import { useFamilyMembers } from "@/hooks/use-family-members";
+import { Link } from "expo-router";
 
 // NOTE: We map the hook's `FamilyMember` to the lightweight shape used by
 // the UI to avoid changing MemberCard.
@@ -200,6 +201,7 @@ export default function DashboardScreen() {
   const [activeMember, setActiveMember] = useState("me");
   const [activeNav, setActiveNav] = useState("home");
   const { members } = useFamilyMembers();
+ 
 
   // Map hook members to the compact shape used by the MemberCard
   const displayMembers: FamilyMember[] = members.map((m) => ({
@@ -319,6 +321,7 @@ export default function DashboardScreen() {
             <Typography variant="h3" color="heading">
               Family Members
             </Typography>
+            <Link href={'/(tabs)/manageFamily'}>
             <TouchableOpacity activeOpacity={0.7}>
               <Typography
                 variant="body-small"
@@ -328,6 +331,7 @@ export default function DashboardScreen() {
                 View All
               </Typography>
             </TouchableOpacity>
+            </Link>
           </View>
 
           {/* Horizontal scroll — padding-left 24 px, trailing space via paddingRight */}
@@ -514,111 +518,6 @@ export default function DashboardScreen() {
         </View>
       </ScrollView>
 
-      {/* ════════════════════════════════════════════════════════════════════
-          E. CUSTOM BOTTOM NAVIGATION
-          ════════════════════════════════════════════════════════════════════ */}
-      <View
-        style={{
-          position: "absolute",
-          bottom: 0,
-          left: 0,
-          right: 0,
-          backgroundColor: "#FFFFFF",
-          borderTopWidth: 1,
-          borderTopColor: "#E5E7EB",
-          flexDirection: "row",
-          alignItems: "flex-end",
-          paddingBottom: Platform.OS === "ios" ? 24 : 12,
-          paddingTop: 10,
-          shadowColor: "#000",
-          shadowOffset: { width: 0, height: -4 },
-          shadowOpacity: 0.06,
-          shadowRadius: 12,
-          elevation: 16,
-        }}
-      >
-        {/* Left two tabs: Home, Records */}
-        {NAV.slice(0, 2).map((item) => {
-          const isActive = activeNav === item.id;
-          return (
-            <TouchableOpacity
-              key={item.id}
-              onPress={() => setActiveNav(item.id)}
-              activeOpacity={0.7}
-              style={{ flex: 1, alignItems: "center" }}
-            >
-              {item.icon(isActive)}
-              <Typography
-                variant="body-small"
-                color={isActive ? "primary" : "secondary"}
-                className={`mt-1 ${isActive ? "font-bold" : ""}`}
-                style={{ fontSize: 10 }}
-              >
-                {item.label}
-              </Typography>
-            </TouchableOpacity>
-          );
-        })}
-
-        {/* Center FAB — Consult */}
-        <View style={{ flex: 1, alignItems: "center", position: "relative" }}>
-          {/* The FAB breaks up out of the nav bar */}
-          <View style={{ alignItems: "center", marginBottom: 2 }}>
-            <TouchableOpacity
-              activeOpacity={0.85}
-              style={{
-                width: 60,
-                height: 60,
-                borderRadius: 9999,
-                backgroundColor: "#069594",
-                alignItems: "center",
-                justifyContent: "center",
-                marginTop: -32, // floats above the bar
-                borderWidth: 4,
-                borderColor: "#FFFFFF",
-                shadowColor: "#069594",
-                shadowOffset: { width: 0, height: 8 },
-                shadowOpacity: 0.35,
-                shadowRadius: 14,
-                elevation: 12,
-              }}
-            >
-              <BriefcaseMedical size={26} color="#FFFFFF" strokeWidth={2} />
-            </TouchableOpacity>
-            <Typography
-              variant="body-small"
-              color="secondary"
-              className="mt-1"
-              style={{ fontSize: 10 }}
-            >
-              Consult
-            </Typography>
-          </View>
-        </View>
-
-        {/* Right two tabs: Orders, Profile */}
-        {NAV.slice(2).map((item) => {
-          const isActive = activeNav === item.id;
-          return (
-            <TouchableOpacity
-              key={item.id}
-              onPress={() => setActiveNav(item.id)}
-              activeOpacity={0.7}
-              style={{ flex: 1, alignItems: "center" }}
-            >
-              {item.icon(isActive)}
-              <Typography
-                variant="body-small"
-                color={isActive ? "primary" : "secondary"}
-                className={`mt-1 ${isActive ? "font-bold" : ""}`}
-                style={{ fontSize: 10 }}
-              >
-                {item.label}
-              </Typography>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
     </SafeAreaView>
   );
 }
