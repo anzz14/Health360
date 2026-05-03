@@ -4,7 +4,7 @@ import { FamilyMember, useFamilyMembers } from "@/hooks/use-family-members";
 import { useKickFamilyMember } from "@/hooks/use-kick-family-member";
 import { supabase } from "@/lib/supabase";
 import { BottomSheetModal, BottomSheetScrollView } from "@gorhom/bottom-sheet";
-import { Link } from "expo-router";
+import { Link, useRouter } from "expo-router";
 import {
   ArrowLeft,
   BriefcaseMedical,
@@ -379,179 +379,189 @@ const MemberCard = ({
   onKick?: (member: FamilyMember) => void;
   isKicking?: boolean;
 }) => {
+  const router = useRouter();
   // This member is the current family admin if their user_id matches families.admin_user_id
   const isThisAdmin = !!m.userId && m.userId === adminUserId;
   const canKick = isAdmin && !isThisAdmin && m.relation !== "Self";
 
   return (
-    <View
-      style={{
-        backgroundColor: "#FFF",
-        borderRadius: 20,
-        padding: 16,
-        marginBottom: 14,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06,
-        shadowRadius: 8,
-        elevation: 3,
-        borderWidth: isThisAdmin ? 1.5 : 0,
-        borderColor: isThisAdmin ? "#A3D6D5" : "transparent",
-      }}
+    <TouchableOpacity
+      activeOpacity={0.9}
+      onPress={() => router.push(`/Memberdetailprofile?memberId=${m.id}`)}
+      style={{ marginBottom: 14 }}
     >
-      <View style={{ flexDirection: "row", alignItems: "center" }}>
-        {/* Avatar */}
-        <View
-          style={{
-            width: 52,
-            height: 52,
-            borderRadius: 9999,
-            overflow: "hidden",
-            flexShrink: 0,
-          }}
-        >
-          <Image source={{ uri: m.avatar }} style={{ width: 52, height: 52 }} />
-        </View>
-
-        {/* Name + meta */}
-        <View style={{ flex: 1, marginLeft: 14 }}>
+      <View
+        style={{
+          backgroundColor: "#FFF",
+          borderRadius: 20,
+          padding: 16,
+          marginBottom: 0,
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.06,
+          shadowRadius: 8,
+          elevation: 3,
+          borderWidth: isThisAdmin ? 1.5 : 0,
+          borderColor: isThisAdmin ? "#A3D6D5" : "transparent",
+        }}
+      >
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          {/* Avatar */}
           <View
             style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 6,
-              flexWrap: "wrap",
+              width: 52,
+              height: 52,
+              borderRadius: 9999,
+              overflow: "hidden",
+              flexShrink: 0,
             }}
           >
-            <Typography
-              variant="body"
-              color="heading"
-              className="font-bold"
-              style={{ fontSize: 17 }}
+            <Image
+              source={{ uri: m.avatar }}
+              style={{ width: 52, height: 52 }}
+            />
+          </View>
+
+          {/* Name + meta */}
+          <View style={{ flex: 1, marginLeft: 14 }}>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 6,
+                flexWrap: "wrap",
+              }}
             >
-              {m.name}
-            </Typography>
-            {/* Admin badge — shown on whoever is admin_user_id */}
-            {isThisAdmin && (
+              <Typography
+                variant="body"
+                color="heading"
+                className="font-bold"
+                style={{ fontSize: 17 }}
+              >
+                {m.name}
+              </Typography>
+              {/* Admin badge — shown on whoever is admin_user_id */}
+              {isThisAdmin && (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 3,
+                    backgroundColor: "#E0F4F4",
+                    paddingHorizontal: 7,
+                    paddingVertical: 2,
+                    borderRadius: 6,
+                  }}
+                >
+                  <ShieldCheck size={11} color="#069594" strokeWidth={2.5} />
+                  <Typography
+                    variant="body-small"
+                    className="font-bold"
+                    style={{ fontSize: 10, color: "#069594" }}
+                  >
+                    Admin
+                  </Typography>
+                </View>
+              )}
+            </View>
+
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                marginTop: 4,
+                gap: 8,
+              }}
+            >
+              <Typography variant="body-small" color="secondary">
+                {m.relation} · {m.age} yrs
+              </Typography>
               <View
                 style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 3,
-                  backgroundColor: "#E0F4F4",
-                  paddingHorizontal: 7,
+                  backgroundColor: m.bloodBg,
+                  paddingHorizontal: 8,
                   paddingVertical: 2,
                   borderRadius: 6,
                 }}
               >
-                <ShieldCheck size={11} color="#069594" strokeWidth={2.5} />
                 <Typography
                   variant="body-small"
                   className="font-bold"
-                  style={{ fontSize: 10, color: "#069594" }}
+                  style={{ fontSize: 11, color: m.bloodColor }}
                 >
-                  Admin
+                  {m.bloodGroup}
                 </Typography>
               </View>
+            </View>
+
+            {/* No linked account label */}
+            {!m.userId && (
+              <Typography
+                variant="body-small"
+                color="muted"
+                style={{ fontSize: 10, marginTop: 3 }}
+              >
+                No app account
+              </Typography>
             )}
           </View>
 
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              marginTop: 4,
-              gap: 8,
-            }}
-          >
-            <Typography variant="body-small" color="secondary">
-              {m.relation} · {m.age} yrs
-            </Typography>
-            <View
+          {canKick ? (
+            <TouchableOpacity
+              onPress={() => onKick?.(m)}
+              disabled={isKicking}
+              activeOpacity={0.75}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               style={{
-                backgroundColor: m.bloodBg,
-                paddingHorizontal: 8,
-                paddingVertical: 2,
-                borderRadius: 6,
+                backgroundColor: "#FEF2F2",
+                borderRadius: 8,
+                paddingHorizontal: 10,
+                paddingVertical: 6,
+                borderWidth: 1,
+                borderColor: "#FECACA",
+                opacity: isKicking ? 0.65 : 1,
               }}
             >
               <Typography
                 variant="body-small"
                 className="font-bold"
-                style={{ fontSize: 11, color: m.bloodColor }}
+                style={{ fontSize: 11, color: "#DC2626" }}
               >
-                {m.bloodGroup}
+                Remove
               </Typography>
-            </View>
-          </View>
-
-          {/* No linked account label */}
-          {!m.userId && (
-            <Typography
-              variant="body-small"
-              color="muted"
-              style={{ fontSize: 10, marginTop: 3 }}
-            >
-              No app account
-            </Typography>
+            </TouchableOpacity>
+          ) : (
+            <ChevronRight size={20} color="#CBD5E1" strokeWidth={2} />
           )}
         </View>
 
-        {canKick ? (
-          <TouchableOpacity
-            onPress={() => onKick?.(m)}
-            disabled={isKicking}
-            activeOpacity={0.75}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            style={{
-              backgroundColor: "#FEF2F2",
-              borderRadius: 8,
-              paddingHorizontal: 10,
-              paddingVertical: 6,
-              borderWidth: 1,
-              borderColor: "#FECACA",
-              opacity: isKicking ? 0.65 : 1,
-            }}
-          >
+        <View
+          style={{ height: 1, backgroundColor: "#E5E7EB", marginVertical: 12 }}
+        />
+        <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <CalendarDays size={14} color="#9CA3AF" strokeWidth={1.8} />
             <Typography
               variant="body-small"
-              className="font-bold"
-              style={{ fontSize: 11, color: "#DC2626" }}
+              color="secondary"
+              style={{ fontSize: 12 }}
             >
-              Remove
+              Last consult: {m.lastConsult}
             </Typography>
-          </TouchableOpacity>
-        ) : (
-          <ChevronRight size={20} color="#CBD5E1" strokeWidth={2} />
-        )}
-      </View>
-
-      <View
-        style={{ height: 1, backgroundColor: "#E5E7EB", marginVertical: 12 }}
-      />
-      <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-          <CalendarDays size={14} color="#9CA3AF" strokeWidth={1.8} />
-          <Typography
-            variant="body-small"
-            color="secondary"
-            style={{ fontSize: 12 }}
-          >
-            Last consult: {m.lastConsult}
-          </Typography>
-        </View>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-          <Folder size={14} color="#9CA3AF" strokeWidth={1.8} />
-          <Typography
-            variant="body-small"
-            color="secondary"
-            style={{ fontSize: 12 }}
-          >
-            {m.records} Records
-          </Typography>
+          </View>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <Folder size={14} color="#9CA3AF" strokeWidth={1.8} />
+            <Typography
+              variant="body-small"
+              color="secondary"
+              style={{ fontSize: 12 }}
+            >
+              {m.records} Records
+            </Typography>
+          </View>
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 };
 
