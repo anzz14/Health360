@@ -1,16 +1,14 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from "@react-navigation/native";
 import { AuthProvider, useAuth } from "@/context/auth-context";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-<<<<<<< HEAD
-import { supabase } from "@/lib/supabase";
-=======
 import { useAppStore } from "@/store/app-store";
->>>>>>> c2de038cc344cc7f0559012f7cce5c82e84996fc
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler"; // ← add this
+import { supabase } from "@/lib/supabase";
 import "react-native-reanimated";
 import "./global.css";
 
@@ -40,8 +38,8 @@ function RootNavigator() {
 
   const [profileChecked, setProfileChecked] = useState(false);
   const [hasProfile, setHasProfile] = useState<boolean | null>(null);
+  const prevSegments = useRef<typeof segments | null>(null);
 
-  // Check if user_profiles row exists whenever session changes
   useEffect(() => {
     if (!session?.user) {
       setHasProfile(null);
@@ -55,17 +53,16 @@ function RootNavigator() {
       try {
         const { data } = await supabase
           .from("user_profiles")
-          .select("id")
+          .select("full_name")
           .eq("id", session.user.id)
           .maybeSingle();
 
         if (!cancelled) {
-          setHasProfile(!!data);
+          setHasProfile(!!data?.full_name?.trim());
           setProfileChecked(true);
         }
       } catch {
         if (!cancelled) {
-          // On error, assume no profile → send to onboarding
           setHasProfile(false);
           setProfileChecked(true);
         }
@@ -76,7 +73,6 @@ function RootNavigator() {
     return () => { cancelled = true; };
   }, [session]);
 
-  // Routing logic runs after both auth and profile check are done
   useEffect(() => {
     if (loading) return;
     if (session && !profileChecked) return;
@@ -84,31 +80,35 @@ function RootNavigator() {
     const inAuthGroup = segments[0] === "(auth)";
     const inOnboarding = segments[0] === "(tabs)" && segments[1] === "onboarding";
 
+    const wasInOnboarding =
+      prevSegments.current?.[0] === "(tabs)" &&
+      prevSegments.current?.[1] === "onboarding";
+
+    prevSegments.current = segments;
+
     if (!session) {
       if (!inAuthGroup) router.replace("/(auth)/login");
       return;
     }
 
     if (!hasProfile) {
-      // Logged in but no profile → onboarding
-      if (!inOnboarding) router.replace("/(tabs)/onboarding/userDetail");
-    } else {
-      // Profile exists → dashboard
-      if (inAuthGroup || inOnboarding) {
-        router.replace("/(tabs)/familyCareDashboard");
+      if (!inOnboarding && !wasInOnboarding) {
+        router.replace("/(tabs)/onboarding/userDetail");
       }
+      return;
+    }
+
+    if (inAuthGroup) {
+      router.replace("/(tabs)/familyCareDashboard");
     }
   }, [session, loading, profileChecked, hasProfile, segments, router]);
 
-  // Spinner while auth loads or profile check is in flight
-  if (loading || (session && !profileChecked)) {
-  // Initialize global store when user logs in / out
   useEffect(() => {
     if (session) fetchAll();
     else resetStore();
   }, [session, fetchAll, resetStore]);
 
-  if (loading) {
+  if (loading || (session && !profileChecked)) {
     return (
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
         <ActivityIndicator size="large" color="#069594" />
@@ -139,17 +139,19 @@ export default function RootLayout() {
   });
 
   const colorScheme = useColorScheme();
-
   if (!loaded) return null;
 
   return (
-    <AuthProvider>
-      <BottomSheetModalProvider>
-        <ThemeProvider value={colorScheme === "light" ? DarkTheme : DefaultTheme}>
-          <RootNavigator />
-          <StatusBar style="auto" />
-        </ThemeProvider>
-      </BottomSheetModalProvider>
-    </AuthProvider>
+    // ↓ GestureHandlerRootView must be the outermost wrapper
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <AuthProvider>
+        <BottomSheetModalProvider>
+          <ThemeProvider value={colorScheme === "light" ? DarkTheme : DefaultTheme}>
+            <RootNavigator />
+            <StatusBar style="auto" />
+          </ThemeProvider>
+        </BottomSheetModalProvider>
+      </AuthProvider>
+    </GestureHandlerRootView>
   );
 }

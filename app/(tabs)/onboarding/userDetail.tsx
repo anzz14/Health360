@@ -749,38 +749,40 @@ export default function ProfileDetails() {
 
   // ── Save ─────────────────────────────────────────────────────────────────
 
-  const handleSave = async () => {
-    if (!fullName || !dob) {
-      Alert.alert(
-        "Missing Info",
-        "Please enter at least your Name and Date of Birth.",
-      );
-      return;
-    }
-    // Serialize conditions (IDs + custom strings) and free-text notes into
-    // a single JSON envelope stored in medical_notes.
-    // On load we JSON.parse this back, so conditions and notes stay separate.
-    const serialized = JSON.stringify({
-      conditions: conditions, // keep raw IDs/custom strings — labels resolved on display
-      notes: medicalNotes.trim(),
-    });
+ const handleSave = async () => {
+  if (!fullName || !dob) {
+    Alert.alert(
+      "Missing Info",
+      "Please enter at least your Name and Date of Birth.",
+    );
+    return;
+  }
 
-    const result = await saveProfile({
-      fullName,
-      dob,
-      gender,
-      bloodGroup,
-      height,
-      weight,
-      medicalNotes: serialized,
-      avatarUrl: avatarUri,
-    });
-    if (!result.success) {
-      Alert.alert("Database Error", result.error || "Failed to save profile");
-      return;
-    }
-    router.replace("/(tabs)/onboarding/familyInfo");
-  };
+  const serialized = JSON.stringify({
+    conditions: conditions,
+    notes: medicalNotes.trim(),
+  });
+
+  const result = await saveProfile({
+    fullName,
+    dob,
+    gender,
+    bloodGroup,
+    height,
+    weight,
+    medicalNotes: serialized,
+    avatarUrl: avatarUri,
+  });
+
+  if (!result.success) {
+    Alert.alert("Database Error", result.error || "Failed to save profile");
+    return;
+  }
+
+  // Go to familyInfo (step 2 of onboarding) — still inside onboarding
+  // so the layout guard won't fight this navigation at all
+  router.replace("/(tabs)/onboarding/familyInfo");
+};
 
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -1236,11 +1238,6 @@ export default function ProfileDetails() {
           </View>
         </Section>
 
-<<<<<<< HEAD
-<Link href={'/(tabs)/onboarding/familyInfo'}>
-        <Button title={saving ? "Saving..." : "Save & Continue"} variant="primary" rounded="full" size="lg" className="w-full mt-10" disabled={saving} rightIcon={<ArrowRight size={18} color="#FFFFFF" strokeWidth={2.5} />} onPress={handleSave} />    
-        </Link>
-=======
         {/* ── CTA ── */}
         <Button
           title={saving ? "Saving..." : "Save & Continue"}
@@ -1252,14 +1249,7 @@ export default function ProfileDetails() {
           rightIcon={<ArrowRight size={18} color="#FFFFFF" strokeWidth={2.5} />}
           onPress={handleSave}
         />
-        <View style={{ alignItems: "center", marginTop: 20 }}>
-          <TouchableOpacity activeOpacity={0.7}>
-            <Typography variant="body" color="secondary">
-              Skip for now
-            </Typography>
-          </TouchableOpacity>
-        </View>
->>>>>>> c2de038cc344cc7f0559012f7cce5c82e84996fc
+    
       </ScrollView>
     </SafeAreaView>
   );

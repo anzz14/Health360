@@ -387,7 +387,7 @@ const MemberCard = ({
   return (
     <TouchableOpacity
       activeOpacity={0.9}
-      onPress={() => router.push(`/Memberdetailprofile?memberId=${m.id}`)}
+      onPress={() => router.push(`/manageFamily/Memberdetailprofile?memberId=${m.id}`)}
       style={{ marginBottom: 14 }}
     >
       <View

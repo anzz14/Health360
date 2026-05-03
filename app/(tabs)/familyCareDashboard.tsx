@@ -306,7 +306,6 @@ export default function DashboardScreen() {
               Hello, {displayName}
             </Typography>
           </View>
-          <Link href={"/(tabs)/onboarding/userDetail"}>ss</Link>
           {/* Right: avatar + online dot */}
           <View style={{ position: "relative" }}>
             <View

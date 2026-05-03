@@ -117,6 +117,25 @@ export default function TabLayout() {
           tabBarItemStyle: { display: "none" },
         }}
       />
+
+   <Tabs.Screen
+  name="manageFamily/Memberdetailprofile"
+  options={{
+    href: null,
+    tabBarStyle: { display: "none" },
+    tabBarItemStyle: { display: "none" },
+  }}
+/>
+
+<Tabs.Screen
+  name="manageFamily/editMemberDetailProfile"
+  options={{
+    href: null,
+    tabBarStyle: { display: "none" },
+    tabBarItemStyle: { display: "none" },
+  }}
+/>
+
     </Tabs>
   );
 }
