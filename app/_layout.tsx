@@ -1,15 +1,11 @@
-import {
-  DarkTheme,
-  DefaultTheme,
-  ThemeProvider,
-} from "@react-navigation/native";
-
+import { DarkTheme, DefaultTheme, ThemeProvider } from "@react-navigation/native";
 import { AuthProvider, useAuth } from "@/context/auth-context";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { supabase } from "@/lib/supabase";
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 import "react-native-reanimated";
 import "./global.css";
@@ -31,25 +27,75 @@ export const unstable_settings = {
   anchor: "(tabs)",
 };
 
-// Handles redirecting based on auth state
 function RootNavigator() {
   const { session, loading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
 
+  const [profileChecked, setProfileChecked] = useState(false);
+  const [hasProfile, setHasProfile] = useState<boolean | null>(null);
+
+  // Check if user_profiles row exists whenever session changes
+  useEffect(() => {
+    if (!session?.user) {
+      setHasProfile(null);
+      setProfileChecked(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const checkProfile = async () => {
+      try {
+        const { data } = await supabase
+          .from("user_profiles")
+          .select("id")
+          .eq("id", session.user.id)
+          .maybeSingle();
+
+        if (!cancelled) {
+          setHasProfile(!!data);
+          setProfileChecked(true);
+        }
+      } catch {
+        if (!cancelled) {
+          // On error, assume no profile → send to onboarding
+          setHasProfile(false);
+          setProfileChecked(true);
+        }
+      }
+    };
+
+    checkProfile();
+    return () => { cancelled = true; };
+  }, [session]);
+
+  // Routing logic runs after both auth and profile check are done
   useEffect(() => {
     if (loading) return;
+    if (session && !profileChecked) return;
 
     const inAuthGroup = segments[0] === "(auth)";
+    const inOnboarding = segments[0] === "(tabs)" && segments[1] === "onboarding";
 
-    if (!session && !inAuthGroup) {
-      router.replace("/(auth)/login");
-    } else if (session && inAuthGroup) {
-      router.replace("/(tabs)/familyCareDashboard");
+    if (!session) {
+      if (!inAuthGroup) router.replace("/(auth)/login");
+      return;
     }
-  }, [session, loading, segments, router]);
 
-  if (loading) {
+    if (!hasProfile) {
+      // Logged in but no profile → onboarding
+      if (!inOnboarding) router.replace("/(tabs)/onboarding/userDetail");
+    } else {
+      // Profile exists → dashboard
+      if (inAuthGroup || inOnboarding) {
+        router.replace("/(tabs)/familyCareDashboard");
+      }
+    }
+  }, [session, loading, profileChecked, hasProfile, segments, router]);
+
+  // Spinner while auth loads or profile check is in flight
+  if (loading || (session && !profileChecked)) {
     return (
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
         <ActivityIndicator size="large" color="#069594" />
@@ -86,9 +132,7 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <BottomSheetModalProvider>
-        <ThemeProvider
-          value={colorScheme === "light" ? DarkTheme : DefaultTheme}
-        >
+        <ThemeProvider value={colorScheme === "light" ? DarkTheme : DefaultTheme}>
           <RootNavigator />
           <StatusBar style="auto" />
         </ThemeProvider>

@@ -2,7 +2,7 @@ import { Typography } from "@/components/typography/typography";
 import { useAuth } from "@/context/auth-context";
 import { useFamilySetup } from "@/hooks/use-family-setup";
 import * as ImagePicker from "expo-image-picker";
-import { useRouter } from "expo-router";
+import { Link, useRouter } from "expo-router";
 import {
   ArrowLeft,
   ArrowRight,
@@ -453,6 +453,13 @@ useEffect(() => {
             <ArrowRight size={18} color="#FFFFFF" strokeWidth={2.5} />
           )}
         </TouchableOpacity>
+         <View className="items-center mt-5">
+                  <TouchableOpacity activeOpacity={0.7}>
+                    <Link href={'/(tabs)/familyCareDashboard'}>
+                    <Typography variant="body" color="secondary">Skip for now</Typography>
+                    </Link>
+                  </TouchableOpacity>
+                </View>
       </View>
     </SafeAreaView>
   );

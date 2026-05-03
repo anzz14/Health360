@@ -1,5 +1,5 @@
 import * as ImagePicker from "expo-image-picker";
-import { useRouter } from "expo-router";
+import { Link, useRouter } from "expo-router";
 import {
   ArrowLeft,
   ArrowRight,
@@ -411,12 +411,9 @@ const fetchRequest = async (inviteCode: string) => {
           </View>
         </Section>
 
-        <Button title={saving ? "Saving..." : "Save & Continue"} variant="primary" rounded="full" size="lg" className="w-full mt-10" disabled={saving} rightIcon={<ArrowRight size={18} color="#FFFFFF" strokeWidth={2.5} />} onPress={handleSave} />
-        <View className="items-center mt-5">
-          <TouchableOpacity activeOpacity={0.7}>
-            <Typography variant="body" color="secondary">Skip for now</Typography>
-          </TouchableOpacity>
-        </View>
+<Link href={'/(tabs)/onboarding/familyInfo'}>
+        <Button title={saving ? "Saving..." : "Save & Continue"} variant="primary" rounded="full" size="lg" className="w-full mt-10" disabled={saving} rightIcon={<ArrowRight size={18} color="#FFFFFF" strokeWidth={2.5} />} onPress={handleSave} />    
+        </Link>
       </ScrollView>
     </SafeAreaView>
   );
