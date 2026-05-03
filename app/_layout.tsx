@@ -1,7 +1,11 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from "@react-navigation/native";
 import { AuthProvider, useAuth } from "@/context/auth-context";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+<<<<<<< HEAD
 import { supabase } from "@/lib/supabase";
+=======
+import { useAppStore } from "@/store/app-store";
+>>>>>>> c2de038cc344cc7f0559012f7cce5c82e84996fc
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -29,6 +33,8 @@ export const unstable_settings = {
 
 function RootNavigator() {
   const { session, loading } = useAuth();
+  const fetchAll = useAppStore((s) => s.fetchAll);
+  const resetStore = useAppStore((s) => s.reset);
   const segments = useSegments();
   const router = useRouter();
 
@@ -96,6 +102,13 @@ function RootNavigator() {
 
   // Spinner while auth loads or profile check is in flight
   if (loading || (session && !profileChecked)) {
+  // Initialize global store when user logs in / out
+  useEffect(() => {
+    if (session) fetchAll();
+    else resetStore();
+  }, [session, fetchAll, resetStore]);
+
+  if (loading) {
     return (
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
         <ActivityIndicator size="large" color="#069594" />

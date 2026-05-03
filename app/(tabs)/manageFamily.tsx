@@ -2,10 +2,9 @@ import { AddMemberBottomSheet } from "@/components/add-member-bottom-sheet";
 import { Typography } from "@/components/typography/typography";
 import { FamilyMember, useFamilyMembers } from "@/hooks/use-family-members";
 import { useKickFamilyMember } from "@/hooks/use-kick-family-member";
-import { Link } from "expo-router";
-
 import { supabase } from "@/lib/supabase";
 import { BottomSheetModal, BottomSheetScrollView } from "@gorhom/bottom-sheet";
+import { Link, useRouter } from "expo-router";
 import {
   ArrowLeft,
   BriefcaseMedical,
@@ -17,6 +16,7 @@ import {
   Folder,
   Home,
   Plus,
+  ShieldCheck,
   ShoppingCart,
   User,
   X,
@@ -116,142 +116,452 @@ const getAge = (dob: string | null): number | null => {
   );
 };
 
+// ─── Change Admin Sheet ───────────────────────────────────────────────────────
+// Shows only members with a user_id — unlinked dummy members are excluded
+
+type ChangeAdminSheetProps = {
+  familyId: string;
+  currentAdminUserId: string | null;
+  members: FamilyMember[];
+  onTransferred: () => void;
+};
+
+const ChangeAdminSheet = React.forwardRef<
+  BottomSheetModal,
+  ChangeAdminSheetProps
+>(({ familyId, currentAdminUserId, members, onTransferred }, ref) => {
+  const snapPoints = useMemo(() => ["60%"], []);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [transferring, setTransferring] = useState(false);
+
+  // Only members with a user_id who are NOT the current admin
+  const eligibleMembers = members.filter(
+    (m) => m.userId && m.userId !== currentAdminUserId,
+  );
+
+  const dismiss = useCallback(() => {
+    if (ref && "current" in ref) ref.current?.dismiss();
+  }, [ref]);
+
+  const handleTransfer = async () => {
+    if (!selectedUserId) return;
+    setTransferring(true);
+    try {
+      const { data, error } = await supabase.rpc("transfer_admin", {
+        p_family_id: familyId,
+        p_new_admin_user_id: selectedUserId,
+      });
+
+      if (error || data?.error) {
+        Alert.alert(
+          "Error",
+          error?.message ?? data?.error ?? "Transfer failed",
+        );
+        return;
+      }
+
+      setSelectedUserId(null);
+      dismiss();
+      onTransferred();
+    } catch (err: any) {
+      Alert.alert("Error", err?.message ?? "Something went wrong");
+    } finally {
+      setTransferring(false);
+    }
+  };
+
+  return (
+    <BottomSheetModal
+      ref={ref}
+      snapPoints={snapPoints}
+      enablePanDownToClose
+      backgroundStyle={{ backgroundColor: "#FFF" }}
+      handleIndicatorStyle={{ backgroundColor: "#E5E7EB", width: 40 }}
+    >
+      <BottomSheetScrollView
+        contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 40 }}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Header */}
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "center",
+            paddingTop: 8,
+            marginBottom: 8,
+          }}
+        >
+          <Typography variant="h3" color="heading">
+            Change Admin
+          </Typography>
+          <TouchableOpacity
+            onPress={dismiss}
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 16,
+              backgroundColor: "#F3F4F6",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <X size={16} color="#6B7280" />
+          </TouchableOpacity>
+        </View>
+
+        <Typography
+          variant="body-small"
+          color="secondary"
+          style={{ marginBottom: 24, lineHeight: 20 }}
+        >
+          Select a member to become the new admin. Only members with an app
+          account can be admin.
+        </Typography>
+
+        {eligibleMembers.length === 0 ? (
+          <View
+            style={{
+              backgroundColor: "#F9FAFB",
+              borderRadius: 16,
+              padding: 20,
+              alignItems: "center",
+              borderWidth: 1,
+              borderColor: "#E5E7EB",
+            }}
+          >
+            <ShieldCheck size={32} color="#9CA3AF" strokeWidth={1.5} />
+            <Typography
+              variant="body-small"
+              color="secondary"
+              style={{ marginTop: 12, textAlign: "center", lineHeight: 20 }}
+            >
+              No other members have an app account yet. They need to join via
+              invite code first.
+            </Typography>
+          </View>
+        ) : (
+          <>
+            {eligibleMembers.map((m) => {
+              const selected = selectedUserId === m.userId;
+              return (
+                <TouchableOpacity
+                  key={m.id}
+                  onPress={() => setSelectedUserId(selected ? null : m.userId!)}
+                  activeOpacity={0.8}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    backgroundColor: selected ? "#F0FAF9" : "#FFF",
+                    borderRadius: 16,
+                    padding: 14,
+                    marginBottom: 10,
+                    borderWidth: selected ? 2 : 1,
+                    borderColor: selected ? "#069594" : "#E5E7EB",
+                    gap: 14,
+                  }}
+                >
+                  {/* Avatar */}
+                  <View
+                    style={{
+                      width: 52,
+                      height: 52,
+                      borderRadius: 9999,
+                      overflow: "hidden",
+                      backgroundColor: "#E0F4F4",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    {m.avatar ? (
+                      <Image
+                        source={{ uri: m.avatar }}
+                        style={{ width: 52, height: 52 }}
+                      />
+                    ) : (
+                      <Typography
+                        variant="body"
+                        color="primary"
+                        className="font-bold"
+                        style={{ fontSize: 16 }}
+                      >
+                        {getInitials(m.name)}
+                      </Typography>
+                    )}
+                  </View>
+
+                  {/* Info */}
+                  <View style={{ flex: 1 }}>
+                    <Typography
+                      variant="body"
+                      color="heading"
+                      className="font-bold"
+                      style={{ fontSize: 16 }}
+                    >
+                      {m.name}
+                    </Typography>
+                    <Typography variant="body-small" color="secondary">
+                      {m.relation}
+                      {m.age !== "--" ? ` · ${m.age} yrs` : ""}
+                    </Typography>
+                  </View>
+
+                  {/* Radio */}
+                  <View
+                    style={{
+                      width: 26,
+                      height: 26,
+                      borderRadius: 13,
+                      backgroundColor: selected ? "#069594" : "#F3F4F6",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      borderWidth: selected ? 0 : 1,
+                      borderColor: "#E5E7EB",
+                    }}
+                  >
+                    {selected && (
+                      <Check size={14} color="#FFF" strokeWidth={3} />
+                    )}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+
+            {/* Confirm button */}
+            <TouchableOpacity
+              onPress={handleTransfer}
+              disabled={!selectedUserId || transferring}
+              activeOpacity={0.88}
+              style={{
+                height: 56,
+                borderRadius: 9999,
+                backgroundColor: "#069594",
+                alignItems: "center",
+                justifyContent: "center",
+                marginTop: 8,
+                opacity: !selectedUserId || transferring ? 0.5 : 1,
+              }}
+            >
+              {transferring ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <Typography
+                  variant="button"
+                  color="white"
+                  className="font-bold"
+                  style={{ fontSize: 16 }}
+                >
+                  Confirm Transfer
+                </Typography>
+              )}
+            </TouchableOpacity>
+          </>
+        )}
+      </BottomSheetScrollView>
+    </BottomSheetModal>
+  );
+});
+
+ChangeAdminSheet.displayName = "ChangeAdminSheet";
+
 // ─── Member Card ─────────────────────────────────────────────────────────────
 
 const MemberCard = ({
   m,
   isAdmin,
+  adminUserId,
   onKick,
   isKicking,
 }: {
   m: FamilyMember;
   isAdmin: boolean;
+  adminUserId: string | null;
   onKick?: (member: FamilyMember) => void;
   isKicking?: boolean;
 }) => {
-  const canKick = isAdmin && m.relation !== "Self";
+  const router = useRouter();
+  // This member is the current family admin if their user_id matches families.admin_user_id
+  const isThisAdmin = !!m.userId && m.userId === adminUserId;
+  const canKick = isAdmin && !isThisAdmin && m.relation !== "Self";
 
   return (
-    <View
-      style={{
-        backgroundColor: "#FFF",
-        borderRadius: 20,
-        padding: 16,
-        marginBottom: 14,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06,
-        shadowRadius: 8,
-        elevation: 3,
-      }}
+    <TouchableOpacity
+      activeOpacity={0.9}
+      onPress={() => router.push(`/Memberdetailprofile?memberId=${m.id}`)}
+      style={{ marginBottom: 14 }}
     >
-      <View style={{ flexDirection: "row", alignItems: "center" }}>
-        <View
-          style={{
-            width: 52,
-            height: 52,
-            borderRadius: 9999,
-            overflow: "hidden",
-            flexShrink: 0,
-          }}
-        >
-          <Image source={{ uri: m.avatar }} style={{ width: 52, height: 52 }} />
-        </View>
-
-        <View style={{ flex: 1, marginLeft: 14 }}>
-          <Typography
-            variant="body"
-            color="heading"
-            className="font-bold"
-            style={{ fontSize: 17 }}
-          >
-            {m.name}
-          </Typography>
+      <View
+        style={{
+          backgroundColor: "#FFF",
+          borderRadius: 20,
+          padding: 16,
+          marginBottom: 0,
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.06,
+          shadowRadius: 8,
+          elevation: 3,
+          borderWidth: isThisAdmin ? 1.5 : 0,
+          borderColor: isThisAdmin ? "#A3D6D5" : "transparent",
+        }}
+      >
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          {/* Avatar */}
           <View
             style={{
-              flexDirection: "row",
-              alignItems: "center",
-              marginTop: 4,
-              gap: 8,
+              width: 52,
+              height: 52,
+              borderRadius: 9999,
+              overflow: "hidden",
+              flexShrink: 0,
             }}
           >
-            <Typography variant="body-small" color="secondary">
-              {m.relation} · {m.age} yrs
-            </Typography>
+            <Image
+              source={{ uri: m.avatar }}
+              style={{ width: 52, height: 52 }}
+            />
+          </View>
+
+          {/* Name + meta */}
+          <View style={{ flex: 1, marginLeft: 14 }}>
             <View
               style={{
-                backgroundColor: m.bloodBg,
-                paddingHorizontal: 8,
-                paddingVertical: 2,
-                borderRadius: 6,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 6,
+                flexWrap: "wrap",
+              }}
+            >
+              <Typography
+                variant="body"
+                color="heading"
+                className="font-bold"
+                style={{ fontSize: 17 }}
+              >
+                {m.name}
+              </Typography>
+              {/* Admin badge — shown on whoever is admin_user_id */}
+              {isThisAdmin && (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 3,
+                    backgroundColor: "#E0F4F4",
+                    paddingHorizontal: 7,
+                    paddingVertical: 2,
+                    borderRadius: 6,
+                  }}
+                >
+                  <ShieldCheck size={11} color="#069594" strokeWidth={2.5} />
+                  <Typography
+                    variant="body-small"
+                    className="font-bold"
+                    style={{ fontSize: 10, color: "#069594" }}
+                  >
+                    Admin
+                  </Typography>
+                </View>
+              )}
+            </View>
+
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                marginTop: 4,
+                gap: 8,
+              }}
+            >
+              <Typography variant="body-small" color="secondary">
+                {m.relation} · {m.age} yrs
+              </Typography>
+              <View
+                style={{
+                  backgroundColor: m.bloodBg,
+                  paddingHorizontal: 8,
+                  paddingVertical: 2,
+                  borderRadius: 6,
+                }}
+              >
+                <Typography
+                  variant="body-small"
+                  className="font-bold"
+                  style={{ fontSize: 11, color: m.bloodColor }}
+                >
+                  {m.bloodGroup}
+                </Typography>
+              </View>
+            </View>
+
+            {/* No linked account label */}
+            {!m.userId && (
+              <Typography
+                variant="body-small"
+                color="muted"
+                style={{ fontSize: 10, marginTop: 3 }}
+              >
+                No app account
+              </Typography>
+            )}
+          </View>
+
+          {canKick ? (
+            <TouchableOpacity
+              onPress={() => onKick?.(m)}
+              disabled={isKicking}
+              activeOpacity={0.75}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={{
+                backgroundColor: "#FEF2F2",
+                borderRadius: 8,
+                paddingHorizontal: 10,
+                paddingVertical: 6,
+                borderWidth: 1,
+                borderColor: "#FECACA",
+                opacity: isKicking ? 0.65 : 1,
               }}
             >
               <Typography
                 variant="body-small"
                 className="font-bold"
-                style={{ fontSize: 11, color: m.bloodColor }}
+                style={{ fontSize: 11, color: "#DC2626" }}
               >
-                {m.bloodGroup}
+                Remove
               </Typography>
-            </View>
-          </View>
+            </TouchableOpacity>
+          ) : (
+            <ChevronRight size={20} color="#CBD5E1" strokeWidth={2} />
+          )}
         </View>
 
-        {canKick ? (
-          <TouchableOpacity
-            onPress={() => onKick?.(m)}
-            disabled={isKicking}
-            activeOpacity={0.75}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            style={{
-              backgroundColor: "#FEF2F2",
-              borderRadius: 8,
-              paddingHorizontal: 10,
-              paddingVertical: 6,
-              borderWidth: 1,
-              borderColor: "#FECACA",
-              opacity: isKicking ? 0.65 : 1,
-            }}
-          >
+        <View
+          style={{ height: 1, backgroundColor: "#E5E7EB", marginVertical: 12 }}
+        />
+        <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <CalendarDays size={14} color="#9CA3AF" strokeWidth={1.8} />
             <Typography
               variant="body-small"
-              className="font-bold"
-              style={{ fontSize: 11, color: "#DC2626" }}
+              color="secondary"
+              style={{ fontSize: 12 }}
             >
-              Remove
+              Last consult: {m.lastConsult}
             </Typography>
-          </TouchableOpacity>
-        ) : (
-          <ChevronRight size={20} color="#CBD5E1" strokeWidth={2} />
-        )}
-      </View>
-
-      <View
-        style={{ height: 1, backgroundColor: "#E5E7EB", marginVertical: 12 }}
-      />
-      <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-          <CalendarDays size={14} color="#9CA3AF" strokeWidth={1.8} />
-          <Typography
-            variant="body-small"
-            color="secondary"
-            style={{ fontSize: 12 }}
-          >
-            Last consult: {m.lastConsult}
-          </Typography>
-        </View>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-          <Folder size={14} color="#9CA3AF" strokeWidth={1.8} />
-          <Typography
-            variant="body-small"
-            color="secondary"
-            style={{ fontSize: 12 }}
-          >
-            {m.records} Records
-          </Typography>
+          </View>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <Folder size={14} color="#9CA3AF" strokeWidth={1.8} />
+            <Typography
+              variant="body-small"
+              color="secondary"
+              style={{ fontSize: 12 }}
+            >
+              {m.records} Records
+            </Typography>
+          </View>
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 };
 
@@ -393,7 +703,6 @@ const JoinRequestSheet = React.forwardRef<SheetRef, SheetProps>(
 
     const dismiss = useCallback(() => innerRef.current?.dismiss(), []);
 
-    // ── Deny ────────────────────────────────────────────────────────────────────
     const handleDeny = async () => {
       if (!req) return;
       setDenying(true);
@@ -401,7 +710,6 @@ const JoinRequestSheet = React.forwardRef<SheetRef, SheetProps>(
         .from("join_requests")
         .delete()
         .eq("id", req.id);
-
       if (error) {
         Alert.alert("Error", `Failed to deny: ${error.message}`);
         setDenying(false);
@@ -412,49 +720,27 @@ const JoinRequestSheet = React.forwardRef<SheetRef, SheetProps>(
       onHandled();
     };
 
-    // ── Accept ───────────────────────────────────────────────────────────────────
-    //
-    // BUG 1 FIX: Previously used conditional spreads like:
-    //   `...(profile?.dob != null && { dob: profile.dob })`
-    // This left dummy values in place when the real profile field was null.
-    // Now we always overwrite ALL fields unconditionally (using ?? null).
-    //
-    // This also fixes BUG 2: since the family_members DB row is now fully
-    // correct after accept, ALL clients reading that row will see accurate data —
-    // not just the admin who has the in-memory profile merge.
-
-    // ── Accept ───────────────────────────────────────────────────────────────────
-    // Uses a SECURITY DEFINER RPC function so RLS never blocks the profile
-    // read or the family_members update. The server-side function handles
-    // everything atomically: fetch profile → update/insert → delete request.
     const handleAccept = async () => {
       if (!req) return;
       setAccepting(true);
-
       try {
         const { data, error } = await supabase.rpc("accept_join_request", {
           p_request_id: req.id,
-          p_member_id:  selId ?? null,   // null → PATH B (insert fresh)
-          p_family_id:  req.family_id,
-          p_user_id:    req.user_id,
-          p_relation:   selId
+          p_member_id: selId ?? null,
+          p_family_id: req.family_id,
+          p_user_id: req.user_id,
+          p_relation: selId
             ? (options.find((o) => o.id === selId)?.relation ?? "Member")
             : "Member",
         });
-
-        console.log("[handleAccept] rpc result:", JSON.stringify(data));
-        console.log("[handleAccept] rpc error:", JSON.stringify(error));
-
         if (error) {
           Alert.alert("Error", error.message);
           return;
         }
-
         if (data?.error) {
           Alert.alert("Error", data.error);
           return;
         }
-
         dismiss();
         onHandled();
       } catch (err: any) {
@@ -464,7 +750,6 @@ const JoinRequestSheet = React.forwardRef<SheetRef, SheetProps>(
       }
     };
 
-    // ── Radio row ────────────────────────────────────────────────────────────────
     const RadioRow = ({
       id,
       label,
@@ -574,7 +859,6 @@ const JoinRequestSheet = React.forwardRef<SheetRef, SheetProps>(
           contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 48 }}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Header */}
           <View
             style={{
               flexDirection: "row",
@@ -602,7 +886,6 @@ const JoinRequestSheet = React.forwardRef<SheetRef, SheetProps>(
             </TouchableOpacity>
           </View>
 
-          {/* Requester banner */}
           {req && (
             <View
               style={{
@@ -676,15 +959,14 @@ const JoinRequestSheet = React.forwardRef<SheetRef, SheetProps>(
             color="secondary"
             style={{ marginBottom: 18, lineHeight: 20 }}
           >
-            Select a member to link their account and replace the profile with
-            their real data — or "None of these" to add fresh.
+            Select a member to link their account — or "None of these" to add
+            fresh.
           </Typography>
 
           {loading ? (
             <ActivityIndicator color="#069594" style={{ marginVertical: 32 }} />
           ) : (
             <>
-              {/* Existing member options */}
               {options.map((m) => {
                 const a = getAge(m.dob);
                 const sub = [
@@ -705,8 +987,6 @@ const JoinRequestSheet = React.forwardRef<SheetRef, SheetProps>(
                   />
                 );
               })}
-
-              {/* None of these */}
               <View style={{ marginBottom: 28 }}>
                 <RadioRow
                   id={null}
@@ -715,8 +995,6 @@ const JoinRequestSheet = React.forwardRef<SheetRef, SheetProps>(
                   onSelect={() => setSelId(null)}
                 />
               </View>
-
-              {/* Action buttons */}
               <View style={{ gap: 10 }}>
                 <TouchableOpacity
                   onPress={handleAccept}
@@ -746,7 +1024,6 @@ const JoinRequestSheet = React.forwardRef<SheetRef, SheetProps>(
                     </Typography>
                   )}
                 </TouchableOpacity>
-
                 <TouchableOpacity
                   onPress={handleDeny}
                   disabled={accepting || denying}
@@ -794,8 +1071,12 @@ export default function ManageFamilyScreen() {
   const [pendingKickMember, setPendingKickMember] =
     useState<FamilyMember | null>(null);
 
+  // admin_user_id fetched directly from families table
+  const [adminUserId, setAdminUserId] = useState<string | null>(null);
+
   const addMemberRef = useRef<BottomSheetModal>(null);
   const joinRequestRef = useRef<SheetRef>(null);
+  const changeAdminRef = useRef<BottomSheetModal>(null);
 
   const {
     members,
@@ -807,6 +1088,19 @@ export default function ManageFamilyScreen() {
     refetch,
   } = useFamilyMembers();
   const { kickMember, kicking } = useKickFamilyMember();
+
+  // Fetch admin_user_id from families table directly
+  useEffect(() => {
+    if (!familyId) return;
+    supabase
+      .from("families")
+      .select("admin_user_id")
+      .eq("id", familyId)
+      .single()
+      .then(({ data }) => {
+        setAdminUserId(data?.admin_user_id ?? null);
+      });
+  }, [familyId]);
 
   const fetchJoinRequests = useCallback(async (fid: string) => {
     setRequestsLoading(true);
@@ -844,17 +1138,25 @@ export default function ManageFamilyScreen() {
 
   const confirmKickMember = useCallback(async () => {
     if (!pendingKickMember || !familyId) return;
-
     const member = pendingKickMember;
     setPendingKickMember(null);
-
     const result = await kickMember(familyId, member.id);
-    if (result.success) {
-      await refetch();
-    } else {
-      Alert.alert("Error", result.error ?? "Failed to remove member");
-    }
+    if (result.success) await refetch();
+    else Alert.alert("Error", result.error ?? "Failed to remove member");
   }, [familyId, kickMember, pendingKickMember, refetch]);
+
+  const handleAdminTransferred = useCallback(async () => {
+    await refetch();
+    // Re-fetch admin_user_id to update badges
+    if (familyId) {
+      const { data } = await supabase
+        .from("families")
+        .select("admin_user_id")
+        .eq("id", familyId)
+        .single();
+      setAdminUserId(data?.admin_user_id ?? null);
+    }
+  }, [familyId, refetch]);
 
   return (
     <SafeAreaView
@@ -877,15 +1179,42 @@ export default function ManageFamilyScreen() {
           gap: 12,
         }}
       >
-        
         <TouchableOpacity activeOpacity={0.7}>
-           <Link href={'/familyCareDashboard'}>
-          <ArrowLeft size={22} color="#1A2B4B" strokeWidth={2.3} />
+          <Link href={"/familyCareDashboard"}>
+            <ArrowLeft size={22} color="#1A2B4B" strokeWidth={2.3} />
           </Link>
         </TouchableOpacity>
-        <Typography variant="h3" color="heading">
+        <Typography variant="h3" color="heading" style={{ flex: 1 }}>
           {isAdmin ? "Manage Family" : "My Family"}
         </Typography>
+
+        {/* Change Admin button — admin only */}
+        {isAdmin && (
+          <TouchableOpacity
+            onPress={() => changeAdminRef.current?.present()}
+            activeOpacity={0.7}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 5,
+              backgroundColor: "#E0F4F4",
+              paddingHorizontal: 12,
+              paddingVertical: 7,
+              borderRadius: 9999,
+              borderWidth: 1,
+              borderColor: "#A3D6D5",
+            }}
+          >
+            <ShieldCheck size={14} color="#069594" strokeWidth={2.5} />
+            <Typography
+              variant="body-small"
+              className="font-bold"
+              style={{ color: "#069594", fontSize: 12 }}
+            >
+              Change Admin
+            </Typography>
+          </TouchableOpacity>
+        )}
       </View>
 
       <ScrollView
@@ -904,7 +1233,7 @@ export default function ManageFamilyScreen() {
           />
         ) : (
           <>
-            {/* ── Admin only: invite code ── */}
+            {/* Invite code */}
             {isAdmin && inviteCode ? (
               <View
                 style={{
@@ -960,7 +1289,7 @@ export default function ManageFamilyScreen() {
               </View>
             ) : null}
 
-            {/* ── Admin only: pending join requests ── */}
+            {/* Join requests */}
             {isAdmin && (
               <View style={{ marginBottom: 6 }}>
                 <Typography
@@ -1014,7 +1343,7 @@ export default function ManageFamilyScreen() {
               </View>
             )}
 
-            {/* Members list — all users see this */}
+            {/* Members */}
             <Typography
               variant="body"
               color="secondary"
@@ -1022,17 +1351,19 @@ export default function ManageFamilyScreen() {
             >
               {members.length} members in {familyName || "your family"}
             </Typography>
+
             {members.map((m) => (
               <MemberCard
                 key={m.id}
                 m={m}
                 isAdmin={isAdmin}
+                adminUserId={adminUserId}
                 onKick={handleKickMember}
                 isKicking={kicking}
               />
             ))}
 
-            {/* ── Admin only: add member ── */}
+            {/* Add member */}
             {isAdmin && (
               <TouchableOpacity
                 onPress={() => addMemberRef.current?.present()}
@@ -1079,6 +1410,7 @@ export default function ManageFamilyScreen() {
         )}
       </ScrollView>
 
+      {/* Remove member modal */}
       <Modal
         visible={!!pendingKickMember}
         transparent
@@ -1110,9 +1442,8 @@ export default function ManageFamilyScreen() {
             <Typography variant="body" color="secondary" className="mb-6">
               {pendingKickMember
                 ? `Remove ${pendingKickMember.name} from the family? This cannot be undone.`
-                : "Remove this member from the family? This cannot be undone."}
+                : "Remove this member from the family?"}
             </Typography>
-
             <View style={{ flexDirection: "row", gap: 12 }}>
               <TouchableOpacity
                 onPress={() => setPendingKickMember(null)}
@@ -1134,7 +1465,6 @@ export default function ManageFamilyScreen() {
                   Cancel
                 </Typography>
               </TouchableOpacity>
-
               <TouchableOpacity
                 onPress={confirmKickMember}
                 activeOpacity={0.85}
@@ -1203,7 +1533,6 @@ export default function ManageFamilyScreen() {
             </TouchableOpacity>
           );
         })}
-
         <View style={{ flex: 1, alignItems: "center" }}>
           <TouchableOpacity
             activeOpacity={0.85}
@@ -1235,7 +1564,6 @@ export default function ManageFamilyScreen() {
             Consult
           </Typography>
         </View>
-
         {NAV.slice(2).map((item) => {
           const active = activeNav === item.id;
           return (
@@ -1259,7 +1587,7 @@ export default function ManageFamilyScreen() {
         })}
       </View>
 
-      {/* Sheets — admin only */}
+      {/* Sheets */}
       {isAdmin && (
         <>
           <AddMemberBottomSheet
@@ -1271,6 +1599,13 @@ export default function ManageFamilyScreen() {
             ref={joinRequestRef}
             familyId={familyId}
             onHandled={handleRequestHandled}
+          />
+          <ChangeAdminSheet
+            ref={changeAdminRef}
+            familyId={familyId}
+            currentAdminUserId={adminUserId}
+            members={members}
+            onTransferred={handleAdminTransferred}
           />
         </>
       )}

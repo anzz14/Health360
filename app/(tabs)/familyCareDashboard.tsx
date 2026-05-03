@@ -1,6 +1,8 @@
 import { Typography } from "@/components/typography/typography";
+import { useAuth } from "@/context/auth-context";
+import { supabase } from "@/lib/supabase";
+import { Link } from "expo-router";
 import {
-  BriefcaseMedical,
   ChevronRight,
   Clock,
   CreditCard,
@@ -47,10 +49,8 @@ type NavItem = {
   label: string;
   icon: (active: boolean) => React.ReactNode;
 };
-
 // We'll fetch real members using the shared hook from ManageFamily
 import { useFamilyMembers } from "@/hooks/use-family-members";
-import { Link } from "expo-router";
 
 // NOTE: We map the hook's `FamilyMember` to the lightweight shape used by
 // the UI to avoid changing MemberCard.
@@ -200,8 +200,37 @@ const ActionCard = ({ action }: { action: QuickAction }) => (
 export default function DashboardScreen() {
   const [activeMember, setActiveMember] = useState("me");
   const [activeNav, setActiveNav] = useState("home");
+  const [displayName, setDisplayName] = useState("there");
+  const { session } = useAuth();
   const { members } = useFamilyMembers();
- 
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadDisplayName = async () => {
+      const user = session?.user;
+      if (!user) {
+        if (isMounted) setDisplayName("there");
+        return;
+      }
+
+      const { data } = await supabase
+        .from("user_profiles")
+        .select("full_name")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      const name =
+        data?.full_name?.trim() || user.email?.split("@")[0] || "there";
+      if (isMounted) setDisplayName(name);
+    };
+
+    loadDisplayName();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [session]);
 
   // Map hook members to the compact shape used by the MemberCard
   const displayMembers: FamilyMember[] = members.map((m) => ({
@@ -274,10 +303,10 @@ export default function DashboardScreen() {
               Welcome back,
             </Typography>
             <Typography variant="h2" color="heading">
-              Hello, Alex
+              Hello, {displayName}
             </Typography>
           </View>
- <Link href={'/(tabs)/onboarding/userDetail'}>ss</Link>
+          <Link href={"/(tabs)/onboarding/userDetail"}>ss</Link>
           {/* Right: avatar + online dot */}
           <View style={{ position: "relative" }}>
             <View
@@ -290,13 +319,11 @@ export default function DashboardScreen() {
                 borderColor: "rgba(6,149,148,0.2)",
               }}
             >
-
-              
-              <Link href={'/(tabs)/profile'}>
-              <Image
-                source={{ uri: "https://i.pravatar.cc/150?img=12" }}
-                style={{ width: 48, height: 48 }}
-              />
+              <Link href={"/(tabs)/profile"}>
+                <Image
+                  source={{ uri: "https://i.pravatar.cc/150?img=12" }}
+                  style={{ width: 48, height: 48 }}
+                />
               </Link>
             </View>
             {/* Status dot */}
@@ -319,26 +346,25 @@ export default function DashboardScreen() {
         {/* ════════════════════════════════════════════════════════════════════
             B. FAMILY MEMBERS
             ════════════════════════════════════════════════════════════════════ */}
-            
+
         <View className="mt-8">
           {/* Row header */}
           <View className="flex-row justify-between items-center px-6 mb-4">
             <Typography variant="h3" color="heading">
               Family Members
             </Typography>
-           
+
             <TouchableOpacity activeOpacity={0.7}>
-               <Link href={'/(tabs)/manageFamily'}>
-              <Typography
-                variant="body-small"
-                color="primary"
-                className="font-bold"
-              >
-                View All
-              </Typography>
-               </Link>
+              <Link href={"/(tabs)/manageFamily"}>
+                <Typography
+                  variant="body-small"
+                  color="primary"
+                  className="font-bold"
+                >
+                  View All
+                </Typography>
+              </Link>
             </TouchableOpacity>
-           
           </View>
 
           {/* Horizontal scroll — padding-left 24 px, trailing space via paddingRight */}
@@ -524,7 +550,6 @@ export default function DashboardScreen() {
           </View>
         </View>
       </ScrollView>
-
     </SafeAreaView>
   );
 }

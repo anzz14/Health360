@@ -5,6 +5,7 @@ export type FamilyMember = {
   id: string;
   name: string;
   relation: string;
+  userId: string | null;
   age: number | string;
   bloodGroup: string;
   lastConsult: string;
@@ -23,19 +24,22 @@ const calculateAge = (dobString?: string): number | string => {
 };
 
 export function useFamilyMembers() {
-  const [members, setMembers]       = useState<FamilyMember[]>([]);
-  const [familyId, setFamilyId]     = useState<string>("");
+  const [members, setMembers] = useState<FamilyMember[]>([]);
+  const [familyId, setFamilyId] = useState<string>("");
   const [inviteCode, setInviteCode] = useState("");
   const [familyName, setFamilyName] = useState("");
-  const [hasFamily, setHasFamily]   = useState<boolean | null>(null);
-  const [isAdmin, setIsAdmin]       = useState(false);
-  const [loading, setLoading]       = useState(true);
+  const [hasFamily, setHasFamily] = useState<boolean | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       // 1. Current user
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
       if (userError || !user) {
         setHasFamily(false);
         return;
@@ -80,7 +84,8 @@ export function useFamilyMembers() {
       // 4. Fetch family + all its members
       const { data, error } = await supabase
         .from("families")
-        .select(`
+        .select(
+          `
           id,
           name,
           invite_code,
@@ -95,7 +100,8 @@ export function useFamilyMembers() {
             created_at,
             user_id
           )
-        `)
+        `,
+        )
         .eq("id", resolvedFamilyId)
         .maybeSingle();
 
@@ -167,19 +173,19 @@ export function useFamilyMembers() {
         const hasLinkedProfile = profile !== undefined && profile !== null;
 
         const name = hasLinkedProfile
-          ? (profile.full_name?.trim() || m.full_name || "Unknown")
-          : (m.full_name || "Unknown");
+          ? profile.full_name?.trim() || m.full_name || "Unknown"
+          : m.full_name || "Unknown";
 
         const blood = hasLinkedProfile
-          ? (profile.blood_group ?? m.blood_group ?? "")   // profile wins; row as last resort
+          ? (profile.blood_group ?? m.blood_group ?? "") // profile wins; row as last resort
           : (m.blood_group ?? "");
 
         // FIX: For dob, when profile is linked, prefer profile.dob.
         // If the profile's dob is null, show "--" (don't show dummy dob).
         // For unlinked members, use the row's dob (what admin typed).
         const dob = hasLinkedProfile
-          ? (profile.dob ?? null)          // null profile.dob → "--" age (correct)
-          : (m.dob ?? null);               // unlinked → use what admin entered
+          ? (profile.dob ?? null) // null profile.dob → "--" age (correct)
+          : (m.dob ?? null); // unlinked → use what admin entered
 
         const avatar =
           (hasLinkedProfile ? profile.avatar_url : null) ||
@@ -187,16 +193,17 @@ export function useFamilyMembers() {
           `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=069594&color=fff`;
 
         return {
-          id:          m.id,
+          id: m.id,
+          userId: m.user_id ?? null,
           name,
-          relation:    m.relation || "Member",
-          age:         calculateAge(dob ?? undefined),
-          bloodGroup:  blood || "N/A",
+          relation: m.relation || "Member",
+          age: calculateAge(dob ?? undefined),
+          bloodGroup: blood || "N/A",
           avatar,
-          bloodColor:  blood ? "#DC2626" : "#6B7280",
-          bloodBg:     blood ? "#FEF2F2" : "#F3F4F6",
+          bloodColor: blood ? "#DC2626" : "#6B7280",
+          bloodBg: blood ? "#FEF2F2" : "#F3F4F6",
           lastConsult: "--",
-          records:     0,
+          records: 0,
         };
       });
 
