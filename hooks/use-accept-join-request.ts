@@ -1,3 +1,4 @@
+// hooks/useAcceptJoinRequest.ts
 import { supabase } from "@/lib/supabase";
 import {
   AcceptResult,
@@ -10,17 +11,18 @@ import { useCallback, useState } from "react";
 export const useAcceptJoinRequest = () => {
   const [loading, setLoading] = useState(false);
 
-  /**
-   * Fetches both the requester's profile and the existing family member record.
-   * Returns whether a merge dialog is needed.
-   */
+  // ============================================================
+  // STEP 1: Check if merge dialog is needed
+  // Fetches both the requester's profile and the existing member row
+  // ============================================================
   const checkAndAccept = useCallback(
-    async (request: any): Promise<AcceptResult> => {
+    async (request: JoinRequest): Promise<AcceptResult> => {
       setLoading(true);
       try {
         if (!request?.mapped_member_id) {
           throw new Error("No mapped_member_id on request");
         }
+
         const [
           { data: profileData, error: profileError },
           { data: memberData, error: memberError },
@@ -55,11 +57,20 @@ export const useAcceptJoinRequest = () => {
     [],
   );
 
-  /**
-   * Finalizes the acceptance by:
-   * 1. Updating the family_members row with chosen data
-   * 2. Deleting the join_requests row
-   */
+  // ============================================================
+  // STEP 2: Finalize acceptance
+  //
+  // What happens here:
+  //   1. family_members.user_id gets filled in  ← dummy becomes real
+  //   2. join_request.status = 'approved'       ← safe state if delete fails
+  //   3. join_request deleted                   ← cleanup
+  //
+  // After this:
+  //   - Dummy's old records (owner_member_id) are now visible to the user
+  //     because RLS checks fm.user_id = auth.uid() which now matches
+  //   - Admin still sees everything, nothing breaks
+  //   - User's personal records (owner_user_id) were never touched
+  // ============================================================
   const finalizeAccept = useCallback(
     async (
       request: JoinRequest,
@@ -71,6 +82,7 @@ export const useAcceptJoinRequest = () => {
           throw new Error("No mapped_member_id on this request");
         }
 
+        // Build the member update — always set user_id, merge profile if provided
         const memberUpdate: Partial<FamilyMemberRow> = {
           user_id: request.user_id,
           ...(incomingProfile?.full_name && {
@@ -95,24 +107,43 @@ export const useAcceptJoinRequest = () => {
           }),
         };
 
+        // 1. Link the real account to the family_member row
         const { error: updateError } = await supabase
           .from("family_members")
           .update(memberUpdate)
           .eq("id", request.mapped_member_id);
 
-        if (updateError)
+        if (updateError) {
           throw new Error(
             `Failed to update family member: ${updateError.message}`,
           );
+        }
 
+        // 2. Mark request as approved BEFORE deleting
+        //    If delete fails, status is already safe — no double-accept possible
+        const { error: statusError } = await supabase
+          .from("join_requests")
+          .update({ status: "approved" })
+          .eq("id", request.id);
+
+        if (statusError) {
+          // Non-fatal but log it — member is already linked
+          console.warn(
+            "[finalizeAccept] Failed to update request status:",
+            statusError.message,
+          );
+        }
+
+        // 3. Cleanup — delete the join request
         const { error: deleteError } = await supabase
           .from("join_requests")
           .delete()
           .eq("id", request.id);
 
         if (deleteError) {
-          console.error(
-            "[finalizeAccept] join_request delete failed:",
+          // Non-fatal — status is already 'approved' so no harm
+          console.warn(
+            "[finalizeAccept] Failed to delete join request:",
             deleteError.message,
           );
         }

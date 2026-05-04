@@ -59,3 +59,37 @@ export type AcceptResult = {
   existingMember?: FamilyMemberRow;
   incomingProfile?: UserProfileRow;
 };
+
+// ─── Records ──────────────────────────────────────────────────────────────
+export type RecordType =
+  | "radiology"
+  | "hospitalization"
+  | "vaccination"
+  | "lab_result"
+  | "prescription"
+  | "dental"
+  | "ophthalmology"
+  | "allergy_test"
+  | "surgery"
+  | "mental_health"
+  | "general_checkup";
+
+export type RecordRow = {
+  id: string;
+  owner_user_id: string | null;
+  owner_member_id: string | null;
+  created_by_user_id: string;
+  updated_by_user_id: string | null;
+  record_type: RecordType;
+  title: string;
+  description: string | null;
+  record_date: string;
+  doctor_name: string | null;
+  hospital_or_clinic: string | null;
+  attachments: string[] | null;
+  notes: string | null;
+  tags: string[] | null;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+};
