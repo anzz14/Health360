@@ -117,7 +117,6 @@ const getAge = (dob: string | null): number | null => {
 };
 
 // ─── Change Admin Sheet ───────────────────────────────────────────────────────
-// Shows only members with a user_id — unlinked dummy members are excluded
 
 type ChangeAdminSheetProps = {
   familyId: string;
@@ -134,7 +133,6 @@ const ChangeAdminSheet = React.forwardRef<
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [transferring, setTransferring] = useState(false);
 
-  // Only members with a user_id who are NOT the current admin
   const eligibleMembers = members.filter(
     (m) => m.userId && m.userId !== currentAdminUserId,
   );
@@ -182,7 +180,6 @@ const ChangeAdminSheet = React.forwardRef<
         contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 40 }}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Header */}
         <View
           style={{
             flexDirection: "row",
@@ -261,7 +258,6 @@ const ChangeAdminSheet = React.forwardRef<
                     gap: 14,
                   }}
                 >
-                  {/* Avatar */}
                   <View
                     style={{
                       width: 52,
@@ -290,7 +286,6 @@ const ChangeAdminSheet = React.forwardRef<
                     )}
                   </View>
 
-                  {/* Info */}
                   <View style={{ flex: 1 }}>
                     <Typography
                       variant="body"
@@ -306,7 +301,6 @@ const ChangeAdminSheet = React.forwardRef<
                     </Typography>
                   </View>
 
-                  {/* Radio */}
                   <View
                     style={{
                       width: 26,
@@ -327,7 +321,6 @@ const ChangeAdminSheet = React.forwardRef<
               );
             })}
 
-            {/* Confirm button */}
             <TouchableOpacity
               onPress={handleTransfer}
               disabled={!selectedUserId || transferring}
@@ -364,30 +357,41 @@ const ChangeAdminSheet = React.forwardRef<
 
 ChangeAdminSheet.displayName = "ChangeAdminSheet";
 
-// ─── Member Card ─────────────────────────────────────────────────────────────
+// ─── Member Card (with permission check) ─────────────────────────────────────
 
 const MemberCard = ({
   m,
   isAdmin,
   adminUserId,
+  currentUserId,
   onKick,
   isKicking,
 }: {
   m: FamilyMember;
   isAdmin: boolean;
   adminUserId: string | null;
+  currentUserId?: string | null;
   onKick?: (member: FamilyMember) => void;
   isKicking?: boolean;
 }) => {
   const router = useRouter();
-  // This member is the current family admin if their user_id matches families.admin_user_id
   const isThisAdmin = !!m.userId && m.userId === adminUserId;
   const canKick = isAdmin && !isThisAdmin && m.relation !== "Self";
 
+  const canViewProfile = isAdmin || (m.userId && m.userId === currentUserId);
+
+  const handlePress = () => {
+    if (canViewProfile) {
+      router.push(`/manageFamily/Memberdetailprofile?memberId=${m.id}`);
+    } else {
+      Alert.alert("Access Denied", "You can only view your own profile.");
+    }
+  };
+
   return (
     <TouchableOpacity
-      activeOpacity={0.9}
-      onPress={() => router.push(`/manageFamily/Memberdetailprofile?memberId=${m.id}`)}
+      activeOpacity={canViewProfile ? 0.9 : 1}
+      onPress={handlePress}
       style={{ marginBottom: 14 }}
     >
       <View
@@ -406,7 +410,6 @@ const MemberCard = ({
         }}
       >
         <View style={{ flexDirection: "row", alignItems: "center" }}>
-          {/* Avatar */}
           <View
             style={{
               width: 52,
@@ -422,7 +425,6 @@ const MemberCard = ({
             />
           </View>
 
-          {/* Name + meta */}
           <View style={{ flex: 1, marginLeft: 14 }}>
             <View
               style={{
@@ -440,7 +442,6 @@ const MemberCard = ({
               >
                 {m.name}
               </Typography>
-              {/* Admin badge — shown on whoever is admin_user_id */}
               {isThisAdmin && (
                 <View
                   style={{
@@ -494,7 +495,6 @@ const MemberCard = ({
               </View>
             </View>
 
-            {/* No linked account label */}
             {!m.userId && (
               <Typography
                 variant="body-small"
@@ -505,8 +505,8 @@ const MemberCard = ({
               </Typography>
             )}
           </View>
-
-          {canKick ? (
+ <ChevronRight size={20} color="#CBD5E1" strokeWidth={2} />
+          {/* {canKick ? (
             <TouchableOpacity
               onPress={() => onKick?.(m)}
               disabled={isKicking}
@@ -532,7 +532,7 @@ const MemberCard = ({
             </TouchableOpacity>
           ) : (
             <ChevronRight size={20} color="#CBD5E1" strokeWidth={2} />
-          )}
+          )} */}
         </View>
 
         <View
@@ -1062,7 +1062,7 @@ const JoinRequestSheet = React.forwardRef<SheetRef, SheetProps>(
 
 JoinRequestSheet.displayName = "JoinRequestSheet";
 
-// ─── Screen ───────────────────────────────────────────────────────────────────
+// ─── Main Screen ─────────────────────────────────────────────────────────────
 
 export default function ManageFamilyScreen() {
   const [activeNav, setActiveNav] = useState("home");
@@ -1071,7 +1071,6 @@ export default function ManageFamilyScreen() {
   const [pendingKickMember, setPendingKickMember] =
     useState<FamilyMember | null>(null);
 
-  // admin_user_id fetched directly from families table
   const [adminUserId, setAdminUserId] = useState<string | null>(null);
 
   const addMemberRef = useRef<BottomSheetModal>(null);
@@ -1089,7 +1088,19 @@ export default function ManageFamilyScreen() {
   } = useFamilyMembers();
   const { kickMember, kicking } = useKickFamilyMember();
 
-  // Fetch admin_user_id from families table directly
+  // Get current logged-in user's ID
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    supabase.auth.getUser().then(({ data }) => {
+      if (mounted) setCurrentUserId(data.user?.id ?? null);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   useEffect(() => {
     if (!familyId) return;
     supabase
@@ -1147,7 +1158,6 @@ export default function ManageFamilyScreen() {
 
   const handleAdminTransferred = useCallback(async () => {
     await refetch();
-    // Re-fetch admin_user_id to update badges
     if (familyId) {
       const { data } = await supabase
         .from("families")
@@ -1168,7 +1178,6 @@ export default function ManageFamilyScreen() {
     >
       <StatusBar barStyle="dark-content" backgroundColor="#F2F5F7" />
 
-      {/* Header */}
       <View
         style={{
           flexDirection: "row",
@@ -1188,7 +1197,6 @@ export default function ManageFamilyScreen() {
           {isAdmin ? "Manage Family" : "My Family"}
         </Typography>
 
-        {/* Change Admin button — admin only */}
         {isAdmin && (
           <TouchableOpacity
             onPress={() => changeAdminRef.current?.present()}
@@ -1233,7 +1241,6 @@ export default function ManageFamilyScreen() {
           />
         ) : (
           <>
-            {/* Invite code */}
             {isAdmin && inviteCode ? (
               <View
                 style={{
@@ -1289,7 +1296,6 @@ export default function ManageFamilyScreen() {
               </View>
             ) : null}
 
-            {/* Join requests */}
             {isAdmin && (
               <View style={{ marginBottom: 6 }}>
                 <Typography
@@ -1343,7 +1349,6 @@ export default function ManageFamilyScreen() {
               </View>
             )}
 
-            {/* Members */}
             <Typography
               variant="body"
               color="secondary"
@@ -1358,12 +1363,12 @@ export default function ManageFamilyScreen() {
                 m={m}
                 isAdmin={isAdmin}
                 adminUserId={adminUserId}
+                currentUserId={currentUserId}
                 onKick={handleKickMember}
                 isKicking={kicking}
               />
             ))}
 
-            {/* Add member */}
             {isAdmin && (
               <TouchableOpacity
                 onPress={() => addMemberRef.current?.present()}
@@ -1410,7 +1415,6 @@ export default function ManageFamilyScreen() {
         )}
       </ScrollView>
 
-      {/* Remove member modal */}
       <Modal
         visible={!!pendingKickMember}
         transparent
@@ -1490,7 +1494,6 @@ export default function ManageFamilyScreen() {
         </View>
       </Modal>
 
-      {/* Bottom nav */}
       <View
         style={{
           position: "absolute",
@@ -1587,7 +1590,6 @@ export default function ManageFamilyScreen() {
         })}
       </View>
 
-      {/* Sheets */}
       {isAdmin && (
         <>
           <AddMemberBottomSheet

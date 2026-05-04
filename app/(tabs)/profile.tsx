@@ -15,6 +15,7 @@ import {
   MessageCircle,
   ArrowRight,
 } from "lucide-react-native";
+import { supabase } from "@/lib/supabase";
 
 const TEAL = "#069594";
 
@@ -31,6 +32,7 @@ function MenuItem({
   chevronColor?: string;
   last?: boolean;
 }) {
+
   return (
     <TouchableOpacity
       className={`flex-row items-center justify-between px-4 py-4 ${
@@ -72,6 +74,15 @@ function MiniAvatar({
 }
 
 export default function ProfileScreen() {
+
+    const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut();
+    
+    if (error) {
+      console.log("Error logging out", error.message);
+    }
+
+  };
   return (
     <SafeAreaView className="flex-1 bg-[#F5F7FA]">
       {/* Top App Bar */}
@@ -240,11 +251,11 @@ export default function ProfileScreen() {
 
         {/* Footer */}
         <View className="items-center pt-6 pb-4 gap-4">
-          <TouchableOpacity>
-            <Text className="text-base font-bold text-[#EE2222]">Log Out</Text>
-          </TouchableOpacity>
-          <Text className="text-xs text-[#6E7979]">v2.1.0</Text>
-        </View>
+      <TouchableOpacity onPress={handleLogout}>
+        <Text className="text-base font-bold text-[#EE2222]">Log Out</Text>
+      </TouchableOpacity>
+      <Text className="text-xs text-[#6E7979]">v2.1.0</Text>
+    </View>
       </ScrollView>
     </SafeAreaView>
   );

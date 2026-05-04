@@ -1,7 +1,7 @@
 import { Typography } from "@/components/typography/typography";
 import { useAuth } from "@/context/auth-context";
 import { supabase } from "@/lib/supabase";
-import { Link } from "expo-router";
+import { Link, useRouter } from "expo-router";
 import {
   ChevronRight,
   Clock,
@@ -18,6 +18,7 @@ import {
 } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Image,
   Platform,
   SafeAreaView,
@@ -49,11 +50,8 @@ type NavItem = {
   label: string;
   icon: (active: boolean) => React.ReactNode;
 };
-// We'll fetch real members using the shared hook from ManageFamily
-import { useFamilyMembers } from "@/hooks/use-family-members";
 
-// NOTE: We map the hook's `FamilyMember` to the lightweight shape used by
-// the UI to avoid changing MemberCard.
+import { useFamilyMembers } from "@/hooks/use-family-members";
 
 const NAV: NavItem[] = [
   {
@@ -118,7 +116,6 @@ const MemberCard = ({
         backgroundColor: active ? "#069594" : "#FFFFFF",
         borderWidth: active ? 0 : 1,
         borderColor: "#E5E7EB",
-        // shadow
         shadowColor: active ? "#069594" : "#000",
         shadowOffset: { width: 0, height: active ? 6 : 1 },
         shadowOpacity: active ? 0.28 : 0.05,
@@ -147,7 +144,7 @@ const MemberCard = ({
   </TouchableOpacity>
 );
 
-/** Quick action bento card — strictly w-[48%] */
+/** Quick action bento card */
 const ActionCard = ({ action }: { action: QuickAction }) => (
   <TouchableOpacity
     activeOpacity={0.85}
@@ -164,7 +161,6 @@ const ActionCard = ({ action }: { action: QuickAction }) => (
       elevation: action.dark ? 6 : 2,
     }}
   >
-    {/* Icon container */}
     <View
       style={{
         width: 44,
@@ -178,7 +174,6 @@ const ActionCard = ({ action }: { action: QuickAction }) => (
       {action.icon}
     </View>
 
-    {/* Text */}
     <Typography
       variant="body"
       color={action.dark ? "white" : "heading"}
@@ -196,13 +191,61 @@ const ActionCard = ({ action }: { action: QuickAction }) => (
   </TouchableOpacity>
 );
 
+/** Create Family Card – shown inside the Family Members section when no family */
+const CreateFamilyCard = ({ onPress }: { onPress: () => void }) => (
+  <TouchableOpacity
+    activeOpacity={0.9}
+    onPress={onPress}
+    style={{
+      backgroundColor: "#FFFFFF",
+      borderRadius: 20,
+      padding: 16,
+      flexDirection: "row",
+      alignItems: "center",
+      borderWidth: 1.5,
+      borderColor: "#A3D6D5",
+      borderStyle: "dashed",
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.05,
+      shadowRadius: 6,
+      elevation: 2,
+    }}
+  >
+    <View
+      style={{
+        width: 52,
+        height: 52,
+        borderRadius: 16,
+        backgroundColor: "#E0F4F4",
+        alignItems: "center",
+        justifyContent: "center",
+        marginRight: 14,
+      }}
+    >
+      <Plus size={24} color="#069594" strokeWidth={2} />
+    </View>
+    <View style={{ flex: 1 }}>
+      <Typography variant="body" color="heading" className="font-bold">
+        Create Your Family
+      </Typography>
+      <Typography variant="body-small" color="secondary" className="mt-0.5">
+        Add members, manage records & more
+      </Typography>
+    </View>
+    <ChevronRight size={20} color="#CBD5E1" strokeWidth={2} />
+  </TouchableOpacity>
+);
+
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function DashboardScreen() {
   const [activeMember, setActiveMember] = useState("me");
   const [activeNav, setActiveNav] = useState("home");
   const [displayName, setDisplayName] = useState("there");
   const { session } = useAuth();
-  const { members } = useFamilyMembers();
+  const router = useRouter();
+
+  const { familyId, members, loading: familyLoading } = useFamilyMembers();
 
   useEffect(() => {
     let isMounted = true;
@@ -232,7 +275,7 @@ export default function DashboardScreen() {
     };
   }, [session]);
 
-  // Map hook members to the compact shape used by the MemberCard
+  // Map hook members to the compact shape used by MemberCard
   const displayMembers: FamilyMember[] = members.map((m) => ({
     id: m.id,
     label: m.name,
@@ -279,6 +322,21 @@ export default function DashboardScreen() {
     },
   ];
 
+  if (familyLoading) {
+    return (
+      <SafeAreaView
+        style={{
+          flex: 1,
+          backgroundColor: "#F2F5F7",
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
+        <ActivityIndicator size="large" color="#069594" />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView
       style={{
@@ -294,10 +352,9 @@ export default function DashboardScreen() {
         contentContainerStyle={{ paddingBottom: 120 }}
       >
         {/* ════════════════════════════════════════════════════════════════════
-            A. HEADER
+            A. HEADER (always shown)
             ════════════════════════════════════════════════════════════════════ */}
         <View className="flex-row justify-between items-center px-6 mt-6">
-          {/* Left: greeting */}
           <View>
             <Typography variant="body-small" color="secondary">
               Welcome back,
@@ -306,7 +363,6 @@ export default function DashboardScreen() {
               Hello, {displayName}
             </Typography>
           </View>
-          {/* Right: avatar + online dot */}
           <View style={{ position: "relative" }}>
             <View
               style={{
@@ -325,7 +381,6 @@ export default function DashboardScreen() {
                 />
               </Link>
             </View>
-            {/* Status dot */}
             <View
               style={{
                 position: "absolute",
@@ -343,87 +398,97 @@ export default function DashboardScreen() {
         </View>
 
         {/* ════════════════════════════════════════════════════════════════════
-            B. FAMILY MEMBERS
+            B. FAMILY MEMBERS SECTION
+            - If user has a family → show horizontal scroll + "View All"
+            - Else → show Create Family card (no "View All")
             ════════════════════════════════════════════════════════════════════ */}
-
         <View className="mt-8">
-          {/* Row header */}
           <View className="flex-row justify-between items-center px-6 mb-4">
             <Typography variant="h3" color="heading">
               Family Members
             </Typography>
 
-            <TouchableOpacity activeOpacity={0.7}>
-              <Link href={"/(tabs)/manageFamily"}>
-                <Typography
-                  variant="body-small"
-                  color="primary"
-                  className="font-bold"
-                >
-                  View All
-                </Typography>
-              </Link>
-            </TouchableOpacity>
+            {/* Only show "View All" if user belongs to a family */}
+            {familyId && (
+              <TouchableOpacity activeOpacity={0.7}>
+                <Link href={"/(tabs)/manageFamily"}>
+                  <Typography
+                    variant="body-small"
+                    color="primary"
+                    className="font-bold"
+                  >
+                    View All
+                  </Typography>
+                </Link>
+              </TouchableOpacity>
+            )}
           </View>
 
-          {/* Horizontal scroll — padding-left 24 px, trailing space via paddingRight */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 24, gap: 0 }}
-          >
-            {displayMembers.map((m) => (
-              <MemberCard
-                key={m.id}
-                member={m}
-                active={activeMember === m.id}
-                onPress={() => setActiveMember(m.id)}
-              />
-            ))}
+          {familyId ? (
+            // User has a family → show horizontal member list
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: 24, gap: 0 }}
+            >
+              {displayMembers.map((m) => (
+                <MemberCard
+                  key={m.id}
+                  member={m}
+                  active={activeMember === m.id}
+                  onPress={() => setActiveMember(m.id)}
+                />
+              ))}
 
-            {/* Add button */}
-            <View style={{ alignItems: "center" }}>
-              <TouchableOpacity
-                activeOpacity={0.7}
-                style={{
-                  width: 72,
-                  height: 72,
-                  borderRadius: 20,
-                  borderWidth: 2,
-                  borderColor: "#CBD5E1",
-                  borderStyle: "dashed",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  backgroundColor: "transparent",
-                }}
-              >
-                <Plus size={20} color="#94A3B8" strokeWidth={2} />
-              </TouchableOpacity>
-              <Typography
-                variant="body-small"
-                color="secondary"
-                className="mt-2 font-medium"
-              >
-                Add
-              </Typography>
+              {/* Add member button (only for families) */}
+              <View style={{ alignItems: "center" }}>
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  style={{
+                    width: 72,
+                    height: 72,
+                    borderRadius: 20,
+                    borderWidth: 2,
+                    borderColor: "#CBD5E1",
+                    borderStyle: "dashed",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    backgroundColor: "transparent",
+                  }}
+                >
+                  <Plus size={20} color="#94A3B8" strokeWidth={2} />
+                </TouchableOpacity>
+                <Typography
+                  variant="body-small"
+                  color="secondary"
+                  className="mt-2 font-medium"
+                >
+                  Add
+                </Typography>
+              </View>
+            </ScrollView>
+          ) : (
+            // No family → show Create Family card (single card, not scrollable)
+            <View style={{ paddingHorizontal: 24 }}>
+              <CreateFamilyCard
+                onPress={() => router.push("/(tabs)/onboarding/familyInfo")}
+              />
             </View>
-          </ScrollView>
+          )}
         </View>
 
         {/* ════════════════════════════════════════════════════════════════════
-            C. QUICK ACTIONS — Bento grid (strict w-[48%])
+            C. QUICK ACTIONS (always shown)
             ════════════════════════════════════════════════════════════════════ */}
         <View className="mt-8 px-6">
           <Typography variant="h3" color="heading" className="mb-4">
             Quick Actions
           </Typography>
 
-          {/* Row 1 */}
           <View className="flex-row justify-between mb-4">
             <ActionCard action={quickActions[0]} />
             <ActionCard action={quickActions[1]} />
           </View>
-          {/* Row 2 */}
           <View className="flex-row justify-between">
             <ActionCard action={quickActions[2]} />
             <ActionCard action={quickActions[3]} />
@@ -431,16 +496,14 @@ export default function DashboardScreen() {
         </View>
 
         {/* ════════════════════════════════════════════════════════════════════
-            D. UPCOMING APPOINTMENTS
+            D. UPCOMING APPOINTMENTS (always shown)
             ════════════════════════════════════════════════════════════════════ */}
         <View className="mt-8 px-6">
-          {/* Row header */}
           <View className="flex-row justify-between items-center mb-4">
             <Typography variant="h3" color="heading">
               Upcoming Appointments
             </Typography>
 
-            {/* Active badge */}
             <View
               style={{
                 backgroundColor: "#E0F4F4",
@@ -460,7 +523,6 @@ export default function DashboardScreen() {
             </View>
           </View>
 
-          {/* Appointment card */}
           <View
             style={{
               backgroundColor: "#FFFFFF",
@@ -475,7 +537,6 @@ export default function DashboardScreen() {
               elevation: 3,
             }}
           >
-            {/* Date block */}
             <View
               style={{
                 width: 60,
@@ -506,7 +567,6 @@ export default function DashboardScreen() {
               </Typography>
             </View>
 
-            {/* Details */}
             <View style={{ flex: 1 }}>
               <Typography variant="body" color="heading" className="font-bold">
                 Dr. Sarah Jenkins
@@ -519,7 +579,6 @@ export default function DashboardScreen() {
                 Cardiologist · General Checkup
               </Typography>
 
-              {/* Time & room row */}
               <View className="flex-row items-center mt-2" style={{ gap: 12 }}>
                 <View className="flex-row items-center" style={{ gap: 4 }}>
                   <Clock size={13} color="#069594" strokeWidth={2} />
@@ -544,7 +603,6 @@ export default function DashboardScreen() {
               </View>
             </View>
 
-            {/* Chevron */}
             <ChevronRight size={20} color="#CBD5E1" strokeWidth={2} />
           </View>
         </View>

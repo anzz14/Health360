@@ -1,3 +1,4 @@
+import { Link } from "expo-router";
 import {
     ArrowLeft,
     CalendarDays,
@@ -7,6 +8,8 @@ import {
     Plus,
     X,
 } from "lucide-react-native";
+
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
     Alert,
@@ -169,6 +172,9 @@ export default function EditFamilyMember({
   onBack?: () => void;
   onSave?: (form: any) => void;
 }) {
+
+    const { memberId } = useLocalSearchParams<{ memberId: string }>();
+  const router = useRouter();
   const [form, setForm] = useState(INITIAL as any);
   const [isDirty, setIsDirty] = useState(false);
 
@@ -220,7 +226,18 @@ export default function EditFamilyMember({
           activeOpacity={0.7}
           style={styles.headerBtn}
         >
-          <ArrowLeft size={20} color="#334155" strokeWidth={2.2} />
+          <TouchableOpacity
+  onPress={() =>
+    router.push({
+      pathname: "/manageFamily/Memberdetailprofile",
+      params: { memberId },
+    })
+  }
+  activeOpacity={0.7}
+  style={styles.headerBtn}
+>
+  <ArrowLeft size={20} color="#334155" strokeWidth={2.2} />
+</TouchableOpacity>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Edit Member</Text>
         <TouchableOpacity
