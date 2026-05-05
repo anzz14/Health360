@@ -1171,14 +1171,41 @@ export default function ManageFamilyScreen() {
 
   useEffect(() => {
     if (!familyId) return;
-    supabase
-      .from("families")
-      .select("admin_profile_id") // ← new column name
-      .eq("id", familyId)
-      .single()
-      .then(({ data }) => {
-        setAdminProfileId(data?.admin_profile_id ?? null);
-      });
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("families")
+          .select("admin_profile_id")
+          .eq("id", familyId)
+          .single();
+
+        if (error) throw error;
+
+        const adminPid = data?.admin_profile_id ?? null;
+        setAdminProfileId(adminPid);
+
+        if (adminPid) {
+          const { data: profile, error: pErr } = await supabase
+            .from("profiles")
+            .select("auth_user_id")
+            .eq("id", adminPid)
+            .maybeSingle();
+
+          if (pErr) {
+            console.error("Failed to load admin profile auth_user_id:", pErr);
+            setAdminUserId(null);
+          } else {
+            setAdminUserId(profile?.auth_user_id ?? null);
+          }
+        } else {
+          setAdminUserId(null);
+        }
+      } catch (err) {
+        console.error("Failed to fetch admin profile id:", err);
+        setAdminProfileId(null);
+        setAdminUserId(null);
+      }
+    })();
   }, [familyId]);
 
   // fetch join requests with new column names

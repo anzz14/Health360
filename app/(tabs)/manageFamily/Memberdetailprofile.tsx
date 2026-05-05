@@ -55,26 +55,96 @@ const MEMBER = {
     { label: "Next Appointment", value: "Oct 28", badge: true, accent: true },
   ],
   recentRecords: [
-    { id: "1", title: "Vaccination Record", date: "Oct 2", type: "PDF", icon: "syringe", color: "#069594", bg: "rgba(6,149,148,0.10)" },
-    { id: "2", title: "Lab Result", date: "Sep 28", type: "IMG", icon: "flask", color: "#8B4823", bg: "rgba(139,72,35,0.10)" },
-    { id: "3", title: "Prescription", date: "Sep 15", type: "PDF", icon: "clipboard", color: "#4C56AF", bg: "rgba(76,86,175,0.10)" },
+    {
+      id: "1",
+      title: "Vaccination Record",
+      date: "Oct 2",
+      type: "PDF",
+      icon: "syringe",
+      color: "#069594",
+      bg: "rgba(6,149,148,0.10)",
+    },
+    {
+      id: "2",
+      title: "Lab Result",
+      date: "Sep 28",
+      type: "IMG",
+      icon: "flask",
+      color: "#8B4823",
+      bg: "rgba(139,72,35,0.10)",
+    },
+    {
+      id: "3",
+      title: "Prescription",
+      date: "Sep 15",
+      type: "PDF",
+      icon: "clipboard",
+      color: "#4C56AF",
+      bg: "rgba(76,86,175,0.10)",
+    },
   ],
 };
 
 const QUICK_ACCESS = [
-  { id: "records", label: "Medical Records", sub: "24 files", iconColor: "#4C56AF", iconBg: "rgba(76,86,175,0.10)", Icon: FileText },
-  { id: "appointments", label: "Appointments", sub: "1 upcoming", iconColor: "#069594", iconBg: "rgba(6,149,148,0.10)", Icon: CalendarDays },
-  { id: "emergency", label: "Emergency Card", sub: "Contact info", iconColor: "#BA1A1A", iconBg: "rgba(255,218,214,0.40)", Icon: ShieldAlert },
-  { id: "reminders", label: "Reminders", sub: "3 active", iconColor: "#341100", iconBg: "#FFDBCB", Icon: Bell },
+  {
+    id: "records",
+    label: "Medical Records",
+    sub: "24 files",
+    iconColor: "#4C56AF",
+    iconBg: "rgba(76,86,175,0.10)",
+    Icon: FileText,
+  },
+  {
+    id: "appointments",
+    label: "Appointments",
+    sub: "1 upcoming",
+    iconColor: "#069594",
+    iconBg: "rgba(6,149,148,0.10)",
+    Icon: CalendarDays,
+  },
+  {
+    id: "emergency",
+    label: "Emergency Card",
+    sub: "Contact info",
+    iconColor: "#BA1A1A",
+    iconBg: "rgba(255,218,214,0.40)",
+    Icon: ShieldAlert,
+  },
+  {
+    id: "reminders",
+    label: "Reminders",
+    sub: "3 active",
+    iconColor: "#341100",
+    iconBg: "#FFDBCB",
+    Icon: Bell,
+  },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const getInitials = (name: string): string =>
-  name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
+  name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
 
-const RecordIcon = ({ type, color, bg }: { type: string; color: string; bg: string }) => {
-  const Icon = type === "syringe" ? Syringe : type === "flask" ? FlaskConical : ClipboardList;
+const RecordIcon = ({
+  type,
+  color,
+  bg,
+}: {
+  type: string;
+  color: string;
+  bg: string;
+}) => {
+  const Icon =
+    type === "syringe"
+      ? Syringe
+      : type === "flask"
+        ? FlaskConical
+        : ClipboardList;
   return (
     <View style={[styles.recordIconWrap, { backgroundColor: bg }]}>
       <Icon size={18} color={color} strokeWidth={1.8} />
@@ -92,7 +162,12 @@ export default function MemberDetailProfile() {
   const storeMembers = useAppStore((s) => s.members);
   const storeProfile = useAppStore((s) => s.profile);
   const { loadProfile } = useUserProfile();
-  const { familyId, isAdmin, members: familyMembers, loading: membersLoading } = useFamilyMembers();
+  const {
+    familyId,
+    isAdmin,
+    members: familyMembers,
+    loading: membersLoading,
+  } = useFamilyMembers();
   const { kickMember, kicking } = useKickFamilyMember();
 
   const [member, setMember] = useState<any>(null);
@@ -119,56 +194,119 @@ export default function MemberDetailProfile() {
   useEffect(() => {
     if (dropdownVisible) {
       Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 1, duration: 160, useNativeDriver: true }),
-        Animated.spring(scaleAnim, { toValue: 1, tension: 300, friction: 20, useNativeDriver: true }),
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 160,
+          useNativeDriver: true,
+        }),
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          tension: 300,
+          friction: 20,
+          useNativeDriver: true,
+        }),
       ]).start();
     } else {
-      Animated.timing(fadeAnim, { toValue: 0, duration: 100, useNativeDriver: true }).start();
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 100,
+        useNativeDriver: true,
+      }).start();
       scaleAnim.setValue(0.92);
     }
   }, [dropdownVisible]);
 
   // Load member data
   useEffect(() => {
-    if (memberId) {
-      const found = storeMembers.find((mm) => mm.id === memberId);
+    const computeAge = (dob?: string | null) => {
+      if (!dob) return "--";
+      const d = new Date(dob);
+      if (isNaN(d.getTime())) return "--";
+      return Math.abs(
+        new Date(Date.now() - d.getTime()).getUTCFullYear() - 1970,
+      );
+    };
+
+    const applyTemplate = (data: any, relation = "Member") => {
       setMember({
-        name: found?.name ?? MEMBER.name,
-        relation: found?.relation ?? MEMBER.relation,
-        age: found?.age ?? MEMBER.age,
-        bloodGroup: found?.bloodGroup ?? MEMBER.bloodGroup,
-        avatar: found?.avatar ?? MEMBER.avatar,
+        name: data?.name ?? data?.fullName ?? MEMBER.name,
+        relation: relation,
+        age: data?.age ?? (data?.dob ? computeAge(data.dob) : MEMBER.age),
+        bloodGroup: data?.bloodGroup ?? data?.blood_group ?? MEMBER.bloodGroup,
+        avatar:
+          data?.avatar ?? data?.avatarUrl ?? data?.avatar_url ?? MEMBER.avatar,
         allergies: MEMBER.allergies,
         conditions: MEMBER.conditions,
         activeCondition: MEMBER.activeCondition,
         healthSummary: MEMBER.healthSummary,
         recentRecords: MEMBER.recentRecords,
       });
-    } else {
-      const applyProfile = (p: any) => {
-        setMember({
-          name: p?.fullName ?? MEMBER.name,
-          relation: "Self",
-          age: p?.dob ?? MEMBER.age,
-          bloodGroup: p?.bloodGroup ?? MEMBER.bloodGroup,
-          avatar: p?.avatarUrl ?? MEMBER.avatar,
-          allergies: MEMBER.allergies,
-          conditions: MEMBER.conditions,
-          activeCondition: MEMBER.activeCondition,
-          healthSummary: MEMBER.healthSummary,
-          recentRecords: MEMBER.recentRecords,
-        });
-      };
-      if (storeProfile) {
-        applyProfile(storeProfile);
+    };
+
+    (async () => {
+      if (memberId) {
+        // Prefer familyMembers (provided by useFamilyMembers) which uses profile.id
+        const foundInFamily = familyMembers.find((fm) => fm.id === memberId);
+        if (foundInFamily) {
+          applyTemplate(foundInFamily, foundInFamily.relation);
+          return;
+        }
+
+        // Fallback: app store members which may use membership id
+        const foundInStore = storeMembers.find((mm) => mm.id === memberId);
+        if (foundInStore) {
+          applyTemplate(foundInStore, foundInStore.relation);
+          return;
+        }
+
+        // Final fallback: try loading profile by id (profile table)
+        try {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("id, full_name, dob, blood_group, avatar_url")
+            .eq("id", memberId)
+            .maybeSingle();
+
+          if (profile) {
+            applyTemplate(
+              {
+                fullName: profile.full_name,
+                dob: profile.dob,
+                blood_group: profile.blood_group,
+                avatar_url: profile.avatar_url,
+              },
+              "Member",
+            );
+            return;
+          }
+        } catch (e) {
+          // ignore and fall through to unknown template
+        }
+
+        // Not found anywhere — show placeholder
+        applyTemplate(null);
       } else {
-        (async () => {
+        const applyProfile = (p: any) => {
+          applyTemplate(
+            {
+              fullName: p?.fullName,
+              dob: p?.dob,
+              bloodGroup: p?.bloodGroup,
+              avatarUrl: p?.avatarUrl,
+            },
+            "Self",
+          );
+        };
+
+        if (storeProfile) {
+          applyProfile(storeProfile);
+        } else {
           const res = await loadProfile();
           if (res.success && res.data) applyProfile(res.data);
-        })();
+        }
       }
-    }
-  }, [memberId, storeMembers, storeProfile]);
+    })();
+  }, [memberId, storeMembers, storeProfile, familyMembers, loadProfile]);
 
   // ─── Access control ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -188,7 +326,9 @@ export default function MemberDetailProfile() {
     }
 
     // Find the family member record that belongs to the current user
-    const currentUserMember = familyMembers.find((fm) => fm.userId === currentUserId);
+    const currentUserMember = familyMembers.find(
+      (fm) => fm.userId === currentUserId,
+    );
     const isOwnProfile = currentUserMember?.id === memberId;
 
     if (isOwnProfile) {
@@ -215,7 +355,9 @@ export default function MemberDetailProfile() {
   if (!member || accessGranted === null) {
     return (
       <SafeAreaView style={styles.safe}>
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <View
+          style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
+        >
           <ActivityIndicator size="large" color="#069594" />
         </View>
       </SafeAreaView>
@@ -225,19 +367,48 @@ export default function MemberDetailProfile() {
   if (accessGranted === false) {
     return (
       <SafeAreaView style={styles.safe}>
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 }}>
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "center",
+            alignItems: "center",
+            paddingHorizontal: 24,
+          }}
+        >
           <ShieldAlert size={48} color="#DC2626" />
-          <Text style={{ fontSize: 18, fontWeight: '700', marginTop: 16, color: '#1A2B4B' }}>
+          <Text
+            style={{
+              fontSize: 18,
+              fontWeight: "700",
+              marginTop: 16,
+              color: "#1A2B4B",
+            }}
+          >
             Access Denied
           </Text>
-          <Text style={{ fontSize: 14, color: '#6B7280', textAlign: 'center', marginTop: 8, marginBottom: 24 }}>
+          <Text
+            style={{
+              fontSize: 14,
+              color: "#6B7280",
+              textAlign: "center",
+              marginTop: 8,
+              marginBottom: 24,
+            }}
+          >
             You can only view your own profile.
           </Text>
           <TouchableOpacity
-            onPress={() => router.push('/(tabs)/manageFamily')}
-            style={{ backgroundColor: '#069594', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 9999 }}
+            onPress={() => router.push("/(tabs)/manageFamily")}
+            style={{
+              backgroundColor: "#069594",
+              paddingHorizontal: 24,
+              paddingVertical: 12,
+              borderRadius: 9999,
+            }}
           >
-            <Text style={{ color: '#FFF', fontWeight: '700' }}>Back to Family</Text>
+            <Text style={{ color: "#FFF", fontWeight: "700" }}>
+              Back to Family
+            </Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -274,11 +445,21 @@ export default function MemberDetailProfile() {
       </View>
 
       {dropdownVisible && (
-        <Modal transparent animationType="none" visible onRequestClose={() => setDropdownVisible(false)}>
+        <Modal
+          transparent
+          animationType="none"
+          visible
+          onRequestClose={() => setDropdownVisible(false)}
+        >
           <TouchableWithoutFeedback onPress={() => setDropdownVisible(false)}>
             <View style={styles.dropdownOverlay}>
               <TouchableWithoutFeedback>
-                <Animated.View style={[styles.dropdownContainer, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
+                <Animated.View
+                  style={[
+                    styles.dropdownContainer,
+                    { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
+                  ]}
+                >
                   <TouchableOpacity
                     activeOpacity={0.75}
                     style={[styles.dropdownItem, styles.dropdownItemDanger]}
@@ -290,7 +471,11 @@ export default function MemberDetailProfile() {
                     <View style={styles.dropdownItemIcon}>
                       <Trash2 size={16} color="#DC2626" strokeWidth={2} />
                     </View>
-                    <Text style={[styles.dropdownItemLabel, { color: "#DC2626" }]}>Remove Member</Text>
+                    <Text
+                      style={[styles.dropdownItemLabel, { color: "#DC2626" }]}
+                    >
+                      Remove Member
+                    </Text>
                   </TouchableOpacity>
                 </Animated.View>
               </TouchableWithoutFeedback>
@@ -335,14 +520,19 @@ export default function MemberDetailProfile() {
         </View>
       </Modal>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scroll}
+      >
         <View style={styles.heroCard}>
           <View style={styles.avatarWrap}>
             {member.avatar ? (
               <Image source={{ uri: member.avatar }} style={styles.avatar} />
             ) : (
               <View style={[styles.avatar, styles.avatarFallback]}>
-                <Text style={styles.avatarInitials}>{getInitials(member.name)}</Text>
+                <Text style={styles.avatarInitials}>
+                  {getInitials(member.name)}
+                </Text>
               </View>
             )}
             <View style={styles.cameraBadge}>
@@ -353,18 +543,28 @@ export default function MemberDetailProfile() {
           <Text style={styles.heroName}>{member.name}</Text>
 
           <View style={styles.relationPill}>
-            <Text style={styles.relationText}>{member.relation} · {member.age} yrs</Text>
+            <Text style={styles.relationText}>
+              {member.relation} · {member.age} yrs
+            </Text>
           </View>
 
           <View style={styles.chipRow}>
             <View style={[styles.chip, { backgroundColor: "#FFDAD6" }]}>
-              <Text style={[styles.chipText, { color: "#93000A" }]}>{member.bloodGroup}</Text>
+              <Text style={[styles.chipText, { color: "#93000A" }]}>
+                {member.bloodGroup}
+              </Text>
             </View>
-            <View style={[styles.chip, { backgroundColor: "rgba(6,149,148,0.10)" }]}>
-              <Text style={[styles.chipText, { color: "#069594" }]}>{member.allergies} Allergies</Text>
+            <View
+              style={[styles.chip, { backgroundColor: "rgba(6,149,148,0.10)" }]}
+            >
+              <Text style={[styles.chipText, { color: "#069594" }]}>
+                {member.allergies} Allergies
+              </Text>
             </View>
             <View style={[styles.chip, { backgroundColor: "#FFDBCB" }]}>
-              <Text style={[styles.chipText, { color: "#341100" }]}>{member.conditions} Condition</Text>
+              <Text style={[styles.chipText, { color: "#341100" }]}>
+                {member.conditions} Condition
+              </Text>
             </View>
           </View>
 
@@ -386,9 +586,14 @@ export default function MemberDetailProfile() {
             <TouchableOpacity
               key={item.id}
               activeOpacity={0.82}
-              style={[styles.gridCard, i % 2 === 0 ? { marginRight: 8 } : { marginLeft: 8 }]}
+              style={[
+                styles.gridCard,
+                i % 2 === 0 ? { marginRight: 8 } : { marginLeft: 8 },
+              ]}
             >
-              <View style={[styles.gridIconWrap, { backgroundColor: item.iconBg }]}>
+              <View
+                style={[styles.gridIconWrap, { backgroundColor: item.iconBg }]}
+              >
                 <item.Icon size={20} color={item.iconColor} strokeWidth={1.8} />
               </View>
               <View style={styles.gridTextWrap}>
@@ -405,7 +610,13 @@ export default function MemberDetailProfile() {
         <View style={styles.summaryCard}>
           <Text style={styles.sectionTitle}>Health Summary</Text>
           {member.healthSummary.map((row: any, i: number) => (
-            <View key={i} style={[styles.summaryRow, i < member.healthSummary.length - 1 && styles.summaryRowBorder]}>
+            <View
+              key={i}
+              style={[
+                styles.summaryRow,
+                i < member.healthSummary.length - 1 && styles.summaryRowBorder,
+              ]}
+            >
               <Text style={styles.summaryLabel}>{row.label}</Text>
               {row.badge ? (
                 <View style={styles.summaryBadge}>
@@ -426,14 +637,22 @@ export default function MemberDetailProfile() {
             </TouchableOpacity>
           </View>
           {member.recentRecords.map((rec: any) => (
-            <TouchableOpacity key={rec.id} activeOpacity={0.82} style={styles.recordRow}>
+            <TouchableOpacity
+              key={rec.id}
+              activeOpacity={0.82}
+              style={styles.recordRow}
+            >
               <RecordIcon type={rec.icon} color={rec.color} bg={rec.bg} />
               <View style={styles.recordInfo}>
                 <Text style={styles.recordTitle}>{rec.title}</Text>
                 <Text style={styles.recordDate}>{rec.date}</Text>
               </View>
-              <View style={[styles.recordTypeBadge, { backgroundColor: rec.bg }]}>
-                <Text style={[styles.recordTypeText, { color: rec.color }]}>{rec.type}</Text>
+              <View
+                style={[styles.recordTypeBadge, { backgroundColor: rec.bg }]}
+              >
+                <Text style={[styles.recordTypeText, { color: rec.color }]}>
+                  {rec.type}
+                </Text>
               </View>
             </TouchableOpacity>
           ))}
@@ -446,7 +665,12 @@ export default function MemberDetailProfile() {
         <TouchableOpacity
           activeOpacity={0.88}
           style={styles.ctaButton}
-          onPress={() => router.push({ pathname: "/manageFamily/editMemberDetailProfile", params: { memberId } })}
+          onPress={() =>
+            router.push({
+              pathname: "/manageFamily/editMemberDetailProfile",
+              params: { memberId },
+            })
+          }
         >
           <Text style={styles.ctaText}>Edit Member Profile</Text>
         </TouchableOpacity>
@@ -458,11 +682,36 @@ export default function MemberDetailProfile() {
 // ─── Styles (exactly as in original) ─────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#F7F9FC", paddingTop: Platform.OS === "android" ? StatusBar.currentHeight : 0 },
+  safe: {
+    flex: 1,
+    backgroundColor: "#F7F9FC",
+    paddingTop: Platform.OS === "android" ? StatusBar.currentHeight : 0,
+  },
 
-  topBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 24, paddingVertical: 16, backgroundColor: "rgba(247,249,252,0.95)" },
-  topBarBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
-  topBarTitle: { fontFamily: Platform.select({ ios: "System", android: "sans-serif-medium" }), fontSize: 18, fontWeight: "600", color: "#334155", letterSpacing: -0.36 },
+  topBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    backgroundColor: "rgba(247,249,252,0.95)",
+  },
+  topBarBtn: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  topBarTitle: {
+    fontFamily: Platform.select({
+      ios: "System",
+      android: "sans-serif-medium",
+    }),
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#334155",
+    letterSpacing: -0.36,
+  },
 
   dropdownOverlay: { flex: 1, backgroundColor: "transparent" },
   dropdownContainer: {
@@ -481,72 +730,302 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(0,0,0,0.06)",
   },
-  dropdownItem: { flexDirection: "row", alignItems: "center", paddingHorizontal: 18, paddingVertical: 14, gap: 12 },
+  dropdownItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    gap: 12,
+  },
   dropdownItemDanger: { backgroundColor: "rgba(220,38,38,0.04)" },
-  dropdownItemIcon: { width: 28, height: 28, alignItems: "center", justifyContent: "center" },
+  dropdownItemIcon: {
+    width: 28,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   dropdownItemLabel: { fontSize: 14, fontWeight: "600", color: "#334155" },
 
-  confirmOverlay: { flex: 1, backgroundColor: "rgba(15,23,42,0.45)", justifyContent: "center", paddingHorizontal: 24 },
-  confirmCard: { backgroundColor: "#FFF", borderRadius: 24, padding: 20, shadowColor: "#000", shadowOpacity: 0.18, shadowRadius: 16, elevation: 12 },
-  confirmTitle: { fontSize: 18, fontWeight: "700", color: "#1A2B4B", marginBottom: 8 },
-  confirmBody: { fontSize: 14, color: "#6B7280", marginBottom: 24, lineHeight: 20 },
+  confirmOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15,23,42,0.45)",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  confirmCard: {
+    backgroundColor: "#FFF",
+    borderRadius: 24,
+    padding: 20,
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  confirmTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1A2B4B",
+    marginBottom: 8,
+  },
+  confirmBody: {
+    fontSize: 14,
+    color: "#6B7280",
+    marginBottom: 24,
+    lineHeight: 20,
+  },
   confirmRow: { flexDirection: "row", gap: 12 },
-  confirmCancelBtn: { flex: 1, height: 52, borderRadius: 16, backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center" },
+  confirmCancelBtn: {
+    flex: 1,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   confirmCancelText: { fontSize: 15, fontWeight: "700", color: "#334155" },
-  confirmRemoveBtn: { flex: 1, height: 52, borderRadius: 16, backgroundColor: "#DC2626", alignItems: "center", justifyContent: "center" },
+  confirmRemoveBtn: {
+    flex: 1,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: "#DC2626",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   confirmRemoveText: { fontSize: 15, fontWeight: "700", color: "#FFFFFF" },
 
   scroll: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 32 },
 
-  heroCard: { backgroundColor: "#FFFFFF", borderRadius: 32, paddingHorizontal: 24, paddingTop: 24, paddingBottom: 20, alignItems: "center", shadowColor: "#4C56AF", shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.08, shadowRadius: 32, elevation: 6, marginBottom: 20, gap: 8 },
+  heroCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 32,
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 20,
+    alignItems: "center",
+    shadowColor: "#4C56AF",
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.08,
+    shadowRadius: 32,
+    elevation: 6,
+    marginBottom: 20,
+    gap: 8,
+  },
   avatarWrap: { width: 88, height: 88, position: "relative", marginBottom: 4 },
-  avatar: { width: 88, height: 88, borderRadius: 9999, borderWidth: 3, borderColor: "#F2F4F7" },
-  avatarFallback: { backgroundColor: "#CBD5F5", alignItems: "center", justifyContent: "center" },
+  avatar: {
+    width: 88,
+    height: 88,
+    borderRadius: 9999,
+    borderWidth: 3,
+    borderColor: "#F2F4F7",
+  },
+  avatarFallback: {
+    backgroundColor: "#CBD5F5",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   avatarInitials: { fontSize: 28, fontWeight: "800", color: "#4C56AF" },
-  cameraBadge: { position: "absolute", right: 0, bottom: 0, width: 26, height: 26, borderRadius: 9999, backgroundColor: "#069594", borderWidth: 2, borderColor: "#FFFFFF", alignItems: "center", justifyContent: "center" },
-  heroName: { fontSize: 24, fontWeight: "800", color: "#334155", letterSpacing: -0.6, textAlign: "center" },
-  relationPill: { backgroundColor: "#069594", borderRadius: 9999, paddingHorizontal: 16, paddingVertical: 4 },
+  cameraBadge: {
+    position: "absolute",
+    right: 0,
+    bottom: 0,
+    width: 26,
+    height: 26,
+    borderRadius: 9999,
+    backgroundColor: "#069594",
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heroName: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: "#334155",
+    letterSpacing: -0.6,
+    textAlign: "center",
+  },
+  relationPill: {
+    backgroundColor: "#069594",
+    borderRadius: 9999,
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+  },
   relationText: { fontSize: 12, fontWeight: "700", color: "#E3FFFE" },
-  chipRow: { flexDirection: "row", gap: 10, paddingVertical: 8, justifyContent: "center" },
+  chipRow: {
+    flexDirection: "row",
+    gap: 10,
+    paddingVertical: 8,
+    justifyContent: "center",
+  },
   chip: { borderRadius: 9999, paddingHorizontal: 12, paddingVertical: 5 },
   chipText: { fontSize: 12, fontWeight: "700" },
-  alertStrip: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "rgba(6,149,148,0.06)", borderLeftWidth: 4, borderLeftColor: "#069594", borderTopRightRadius: 48, borderBottomRightRadius: 48, paddingHorizontal: 16, paddingVertical: 14, alignSelf: "stretch", marginTop: 4 },
+  alertStrip: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "rgba(6,149,148,0.06)",
+    borderLeftWidth: 4,
+    borderLeftColor: "#069594",
+    borderTopRightRadius: 48,
+    borderBottomRightRadius: 48,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    alignSelf: "stretch",
+    marginTop: 4,
+  },
   alertLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
-  alertIconWrap: { width: 28, height: 28, borderRadius: 9999, backgroundColor: "rgba(6,149,148,0.12)", alignItems: "center", justifyContent: "center" },
+  alertIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 9999,
+    backgroundColor: "rgba(6,149,148,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   alertText: { fontSize: 14, fontWeight: "600", color: "#191C1E" },
   manageBtn: { flexDirection: "row", alignItems: "center", gap: 2 },
   manageBtnText: { fontSize: 14, fontWeight: "700", color: "#069594" },
 
   grid: { flexDirection: "row", flexWrap: "wrap", marginBottom: 20 },
-  gridCard: { flex: 1, backgroundColor: "#FFFFFF", borderRadius: 28, padding: 16, marginBottom: 16, shadowColor: "#4C56AF", shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.06, shadowRadius: 32, elevation: 4, minHeight: 148, justifyContent: "space-between" },
-  gridIconWrap: { width: 44, height: 44, borderRadius: 9999, alignItems: "center", justifyContent: "center" },
+  gridCard: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 28,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: "#4C56AF",
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.06,
+    shadowRadius: 32,
+    elevation: 4,
+    minHeight: 148,
+    justifyContent: "space-between",
+  },
+  gridIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 9999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   gridTextWrap: { flex: 1, marginTop: 12 },
-  gridLabel: { fontSize: 14, fontWeight: "700", color: "#334155", marginBottom: 4 },
+  gridLabel: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#334155",
+    marginBottom: 4,
+  },
   gridSub: { fontSize: 11, fontWeight: "400", color: "#6E7979" },
   gridChevronWrap: { alignItems: "flex-end", marginTop: 8 },
 
-  summaryCard: { backgroundColor: "#FFFFFF", borderRadius: 32, paddingHorizontal: 24, paddingTop: 20, paddingBottom: 16, shadowColor: "#4C56AF", shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.06, shadowRadius: 32, elevation: 4, marginBottom: 20 },
-  sectionTitle: { fontSize: 16, fontWeight: "700", color: "#334155", marginBottom: 12 },
-  summaryRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 10 },
+  summaryCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 32,
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    paddingBottom: 16,
+    shadowColor: "#4C56AF",
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.06,
+    shadowRadius: 32,
+    elevation: 4,
+    marginBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#334155",
+    marginBottom: 12,
+  },
+  summaryRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 10,
+  },
   summaryRowBorder: { borderBottomWidth: 1, borderBottomColor: "#F2F4F7" },
   summaryLabel: { fontSize: 12, fontWeight: "500", color: "#6E7979" },
-  summaryValue: { fontSize: 12, fontWeight: "600", color: "#191C1E", textAlign: "right", flexShrink: 1, marginLeft: 8 },
-  summaryBadge: { backgroundColor: "rgba(6,149,148,0.10)", borderRadius: 9999, paddingHorizontal: 10, paddingVertical: 3 },
+  summaryValue: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#191C1E",
+    textAlign: "right",
+    flexShrink: 1,
+    marginLeft: 8,
+  },
+  summaryBadge: {
+    backgroundColor: "rgba(6,149,148,0.10)",
+    borderRadius: 9999,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
   summaryBadgeText: { fontSize: 11, fontWeight: "700", color: "#069594" },
 
   recentSection: { gap: 10 },
-  recentHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 4 },
+  recentHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    marginBottom: 4,
+  },
   recentTitle: { fontSize: 18, fontWeight: "700", color: "#334155" },
   viewAllText: { fontSize: 12, fontWeight: "700", color: "#069594" },
-  recordRow: { flexDirection: "row", alignItems: "center", backgroundColor: "rgba(242,244,247,0.6)", borderRadius: 48, padding: 12, gap: 12 },
-  recordIconWrap: { width: 44, height: 44, borderRadius: 28, alignItems: "center", justifyContent: "center" },
+  recordRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(242,244,247,0.6)",
+    borderRadius: 48,
+    padding: 12,
+    gap: 12,
+  },
+  recordIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 28,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   recordInfo: { flex: 1 },
-  recordTitle: { fontSize: 14, fontWeight: "700", color: "#191C1E", marginBottom: 2 },
+  recordTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#191C1E",
+    marginBottom: 2,
+  },
   recordDate: { fontSize: 11, fontWeight: "400", color: "#6E7979" },
-  recordTypeBadge: { borderRadius: 6, paddingHorizontal: 9, paddingVertical: 5 },
+  recordTypeBadge: {
+    borderRadius: 6,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
   recordTypeText: { fontSize: 10, fontWeight: "800" },
 
-  bottomBar: { paddingHorizontal: 24, paddingVertical: 20, backgroundColor: "#FFFFFF", shadowColor: "#000", shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 12 },
-  ctaButton: { backgroundColor: "#069594", borderRadius: 9999, height: 56, alignItems: "center", justifyContent: "center", shadowColor: "#069594", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.28, shadowRadius: 16, elevation: 8 },
-  ctaText: { fontSize: 16, fontWeight: "700", color: "#FFFFFF", letterSpacing: 0.2 },
+  bottomBar: {
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 12,
+  },
+  ctaButton: {
+    backgroundColor: "#069594",
+    borderRadius: 9999,
+    height: 56,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#069594",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.28,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  ctaText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    letterSpacing: 0.2,
+  },
 });
