@@ -1,843 +1,685 @@
-import * as ImagePicker from "expo-image-picker";
-import { useRouter } from "expo-router";
+import { Input as InputField } from "@/components/inputs/input";
 import {
-  ArrowLeft,
-  ArrowRight,
-  CalendarDays,
-  Camera,
-  Check,
-  ChevronDown,
-  Plus,
-  Search,
-  Users,
-  X,
-} from "lucide-react-native";
+  Gender,
+  MemberFormData,
+  useMemberProfile
+} from "@/hooks/useMemberProfile";
+import { supabase } from "@/lib/supabase";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { ArrowLeft, CalendarDays, Camera, ChevronDown, Phone } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
+import type { AlertButton } from "react-native";
 import {
+  ActivityIndicator,
   Alert,
   Image,
-  Modal,
-  Platform,
   SafeAreaView,
   ScrollView,
   StatusBar,
+  StyleSheet,
+  Switch,
+  Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 
-import { Button } from "@/components/button/button";
-import { Input } from "@/components/inputs/input";
-import { Typography } from "@/components/typography/typography";
-import { useUserProfile } from "@/hooks/use-user-profile";
-import { supabase } from "@/lib/supabase";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-type Gender = "Male" | "Female" | "Other";
-const GENDERS: Gender[] = ["Male", "Female", "Other"];
-
-const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] as const;
-type BloodGroup = (typeof BLOOD_GROUPS)[number] | "";
-
-// ─── Conditions ───────────────────────────────────────────────────────────────
-
-export type ConditionCategory =
-  | "Metabolic"
-  | "Cardiovascular"
-  | "Respiratory"
-  | "Neurological"
-  | "Digestive"
-  | "Musculoskeletal"
-  | "Immune"
-  | "Mental Health";
-
-export interface Condition {
-  id: string;
-  label: string;
-  category: ConditionCategory;
-}
-
-export const COMMON_CONDITIONS: Condition[] = [
-  { id: "type1_diabetes",   label: "Type 1 Diabetes",       category: "Metabolic" },
-  { id: "type2_diabetes",   label: "Type 2 Diabetes",       category: "Metabolic" },
-  { id: "hypothyroidism",   label: "Hypothyroidism",        category: "Metabolic" },
-  { id: "obesity",          label: "Obesity",               category: "Metabolic" },
-  { id: "hypertension",     label: "Hypertension",          category: "Cardiovascular" },
-  { id: "heart_disease",    label: "Coronary Heart Disease",category: "Cardiovascular" },
-  { id: "high_cholesterol", label: "High Cholesterol",      category: "Cardiovascular" },
-  { id: "asthma",           label: "Asthma",                category: "Respiratory" },
-  { id: "copd",             label: "COPD",                  category: "Respiratory" },
-  { id: "sleep_apnea",      label: "Sleep Apnea",           category: "Respiratory" },
-  { id: "epilepsy",         label: "Epilepsy",              category: "Neurological" },
-  { id: "migraine",         label: "Chronic Migraine",      category: "Neurological" },
-  { id: "parkinsons",       label: "Parkinson's Disease",   category: "Neurological" },
-  { id: "ibs",              label: "IBS",                   category: "Digestive" },
-  { id: "gerd",             label: "GERD / Acid Reflux",    category: "Digestive" },
-  { id: "crohns",           label: "Crohn's Disease",       category: "Digestive" },
-  { id: "arthritis",        label: "Arthritis",             category: "Musculoskeletal" },
-  { id: "osteoporosis",     label: "Osteoporosis",          category: "Musculoskeletal" },
-  { id: "lupus",            label: "Lupus",                 category: "Immune" },
-  { id: "depression",       label: "Depression",            category: "Mental Health" },
-  { id: "anxiety",          label: "Anxiety Disorder",      category: "Mental Health" },
-];
-
-const CATEGORY_COLORS: Record<ConditionCategory, { bg: string; text: string }> = {
-  Metabolic:       { bg: "rgba(6,149,148,0.10)",   text: "#069594" },
-  Cardiovascular:  { bg: "rgba(186,26,26,0.10)",   text: "#BA1A1A" },
-  Respiratory:     { bg: "rgba(76,86,175,0.10)",   text: "#4C56AF" },
-  Neurological:    { bg: "rgba(139,72,35,0.10)",   text: "#8B4823" },
-  Digestive:       { bg: "rgba(234,179,8,0.12)",   text: "#92660A" },
-  Musculoskeletal: { bg: "rgba(107,114,128,0.12)", text: "#4B5563" },
-  Immune:          { bg: "rgba(217,70,239,0.10)",  text: "#9333EA" },
-  "Mental Health": { bg: "rgba(59,130,246,0.10)",  text: "#2563EB" },
-};
-
-// ─── Condition Picker ─────────────────────────────────────────────────────────
-
-interface ConditionPickerProps {
-  selected: string[];
-  onChange: (ids: string[]) => void;
-}
-
-const ConditionPicker: React.FC<ConditionPickerProps> = ({ selected, onChange }) => {
-  const [visible, setVisible]           = useState(false);
-  const [search, setSearch]             = useState("");
-  const [customInput, setCustomInput]   = useState("");
-
-  const filtered = COMMON_CONDITIONS.filter((c) =>
-    c.label.toLowerCase().includes(search.toLowerCase()),
-  );
-
-  const grouped = filtered.reduce<Partial<Record<ConditionCategory, Condition[]>>>(
-    (acc, c) => {
-      if (!acc[c.category]) acc[c.category] = [];
-      acc[c.category]!.push(c);
-      return acc;
-    },
-    {},
-  );
-
-  const toggle = (id: string) =>
-    onChange(selected.includes(id) ? selected.filter((s) => s !== id) : [...selected, id]);
-
-  const addCustom = () => {
-    const trimmed = customInput.trim();
-    if (!trimmed || selected.includes(trimmed)) { setCustomInput(""); return; }
-    onChange([...selected, trimmed]);
-    setCustomInput("");
-  };
-
-  const removeItem  = (id: string) => onChange(selected.filter((s) => s !== id));
-  const getLabel    = (id: string) => COMMON_CONDITIONS.find((c) => c.id === id)?.label ?? id;
-  const getCategory = (id: string): ConditionCategory | null =>
-    COMMON_CONDITIONS.find((c) => c.id === id)?.category ?? null;
-
-  return (
-    <>
-      {/* Trigger / pill display */}
-      <TouchableOpacity
-        activeOpacity={0.85}
-        onPress={() => setVisible(true)}
-        style={{
-          minHeight: 52, borderRadius: 20, borderWidth: 1,
-          borderColor: "#E5E7EB", backgroundColor: "#FFFFFF",
-          paddingHorizontal: 14, paddingVertical: 10,
-          flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6,
-        }}
-      >
-        {selected.length === 0 ? (
-          <Typography variant="body-small" color="secondary">
-            Select conditions or type your own…
-          </Typography>
-        ) : (
-          selected.map((id) => {
-            const cat    = getCategory(id);
-            const colors = cat ? CATEGORY_COLORS[cat] : { bg: "rgba(107,114,128,0.12)", text: "#4B5563" };
-            return (
-              <View key={id} style={{
-                flexDirection: "row", alignItems: "center",
-                backgroundColor: colors.bg, borderRadius: 9999,
-                paddingHorizontal: 10, paddingVertical: 4, gap: 5,
-              }}>
-                <Typography variant="body-small" style={{ fontSize: 12, fontWeight: "700", color: colors.text }}>
-                  {getLabel(id)}
-                </Typography>
-                <TouchableOpacity onPress={() => removeItem(id)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                  <X size={10} color={colors.text} strokeWidth={2.5} />
-                </TouchableOpacity>
-              </View>
-            );
-          })
-        )}
-        <View style={{ marginLeft: "auto" }}>
-          <ChevronDown size={16} color="#9CA3AF" strokeWidth={2} />
-        </View>
-      </TouchableOpacity>
-
-      {/* Picker modal */}
-      <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setVisible(false)}>
-        <SafeAreaView style={{ flex: 1, backgroundColor: "#F7F9FC" }}>
-          {/* Header */}
-          <View style={{
-            flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-            paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12,
-            backgroundColor: "#FFFFFF", borderBottomWidth: 1, borderBottomColor: "#F2F4F7",
-          }}>
-            <Typography variant="h3" color="heading">Conditions & Illnesses</Typography>
-            <TouchableOpacity onPress={() => setVisible(false)} style={{
-              width: 32, height: 32, borderRadius: 16,
-              backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center",
-            }}>
-              <X size={16} color="#6B7280" strokeWidth={2} />
-            </TouchableOpacity>
-          </View>
-
-          <View style={{ paddingHorizontal: 20, paddingTop: 10, paddingBottom: 4 }}>
-            <Typography variant="body-small" color="secondary">
-              Select all that apply. You can also type a condition not listed.
-            </Typography>
-          </View>
-
-          {/* Search */}
-          <View style={{
-            marginHorizontal: 20, marginVertical: 10, flexDirection: "row", alignItems: "center",
-            backgroundColor: "#FFFFFF", borderRadius: 16, borderWidth: 1,
-            borderColor: "#E5E7EB", paddingHorizontal: 14, height: 46, gap: 10,
-          }}>
-            <Search size={16} color="#9CA3AF" strokeWidth={2} />
-            <TextInput
-              value={search} onChangeText={setSearch}
-              placeholder="Search conditions…" placeholderTextColor="#9CA3AF"
-              style={{ flex: 1, fontSize: 14, color: "#1F2937" }} autoCorrect={false}
-            />
-            {search.length > 0 && (
-              <TouchableOpacity onPress={() => setSearch("")}>
-                <X size={14} color="#9CA3AF" strokeWidth={2} />
-              </TouchableOpacity>
-            )}
-          </View>
-
-          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 32 }}>
-
-            {/* Custom input */}
-            <View style={{
-              backgroundColor: "#FFFFFF", borderRadius: 20, padding: 16,
-              marginBottom: 16, borderWidth: 1, borderColor: "#E5E7EB",
-            }}>
-              <Typography variant="body-small" color="secondary" style={{ marginBottom: 10, fontWeight: "600" }}>
-                Not listed? Type it yourself:
-              </Typography>
-              <View style={{ flexDirection: "row", gap: 8 }}>
-                <TextInput
-                  value={customInput} onChangeText={setCustomInput}
-                  placeholder="e.g. Sickle Cell Anaemia…" placeholderTextColor="#9CA3AF"
-                  style={{
-                    flex: 1, height: 44, borderRadius: 12, borderWidth: 1,
-                    borderColor: "#E5E7EB", paddingHorizontal: 14, fontSize: 14,
-                    color: "#1F2937", backgroundColor: "#F9FAFB",
-                  }}
-                  onSubmitEditing={addCustom} returnKeyType="done"
-                />
-                <TouchableOpacity onPress={addCustom} disabled={!customInput.trim()} style={{
-                  width: 44, height: 44, borderRadius: 12,
-                  backgroundColor: customInput.trim() ? "#069594" : "#E5E7EB",
-                  alignItems: "center", justifyContent: "center",
-                }}>
-                  <Plus size={18} color="#FFFFFF" strokeWidth={2.5} />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* Grouped list */}
-            {(Object.keys(grouped) as ConditionCategory[]).map((cat) => (
-              <View key={cat} style={{ marginBottom: 16 }}>
-                <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 8, gap: 6 }}>
-                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: CATEGORY_COLORS[cat].text }} />
-                  <Typography variant="body-small" style={{
-                    fontSize: 11, fontWeight: "800", letterSpacing: 1,
-                    color: CATEGORY_COLORS[cat].text, textTransform: "uppercase",
-                  }}>
-                    {cat}
-                  </Typography>
-                </View>
-                <View style={{
-                  backgroundColor: "#FFFFFF", borderRadius: 20,
-                  borderWidth: 1, borderColor: "#F2F4F7", overflow: "hidden",
-                }}>
-                  {grouped[cat]!.map((condition, idx) => {
-                    const isSelected = selected.includes(condition.id);
-                    const isLast     = idx === grouped[cat]!.length - 1;
-                    const colors     = CATEGORY_COLORS[condition.category];
-                    return (
-                      <TouchableOpacity key={condition.id} onPress={() => toggle(condition.id)} activeOpacity={0.75}
-                        style={{
-                          flexDirection: "row", alignItems: "center",
-                          paddingHorizontal: 16, paddingVertical: 14,
-                          backgroundColor: isSelected ? colors.bg : "#FFFFFF",
-                          borderBottomWidth: isLast ? 0 : 1, borderBottomColor: "#F2F4F7", gap: 12,
-                        }}>
-                        <View style={{
-                          width: 24, height: 24, borderRadius: 8,
-                          backgroundColor: isSelected ? colors.text : "#F3F4F6",
-                          borderWidth: isSelected ? 0 : 1, borderColor: "#E5E7EB",
-                          alignItems: "center", justifyContent: "center",
-                        }}>
-                          {isSelected && <Check size={13} color="#FFFFFF" strokeWidth={3} />}
-                        </View>
-                        <Typography variant="body-small" style={{
-                          fontSize: 14, fontWeight: isSelected ? "700" : "500",
-                          color: isSelected ? colors.text : "#374151", flex: 1,
-                        }}>
-                          {condition.label}
-                        </Typography>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-            ))}
-
-            {filtered.length === 0 && search.length > 0 && (
-              <View style={{ alignItems: "center", paddingVertical: 24 }}>
-                <Typography variant="body-small" color="secondary" style={{ textAlign: "center" }}>
-                  No results for "{search}". Use the field above to add it manually.
-                </Typography>
-              </View>
-            )}
-          </ScrollView>
-
-          {/* Confirm */}
-          <View style={{
-            paddingHorizontal: 20, paddingBottom: Platform.OS === "ios" ? 24 : 20,
-            paddingTop: 12, backgroundColor: "#FFFFFF",
-            borderTopWidth: 1, borderTopColor: "#F2F4F7",
-          }}>
-            <TouchableOpacity onPress={() => setVisible(false)} activeOpacity={0.88} style={{
-              height: 52, borderRadius: 9999, backgroundColor: "#069594",
-              alignItems: "center", justifyContent: "center",
-            }}>
-              <Typography variant="button" color="white" style={{ fontWeight: "700", fontSize: 15 }}>
-                Done · {selected.length} selected
-              </Typography>
-            </TouchableOpacity>
-          </View>
-        </SafeAreaView>
-      </Modal>
-    </>
-  );
-};
-
-// ─── Join Request Card ────────────────────────────────────────────────────────
-
-interface JoinRequestDisplay {
-  id: string;
-  family_id: string;
-  status: "pending" | "approved" | "rejected";
-  created_at: string;
-  families?: { name: string };
-}
-
-const JoinRequestCard = ({ req }: { req: JoinRequestDisplay }) => (
-  <View style={{
-    backgroundColor: "#FFFFFF", borderRadius: 16, paddingHorizontal: 16,
-    paddingVertical: 12, marginBottom: 8, borderWidth: 1, borderColor: "#E5E7EB",
-  }}>
-    <Typography variant="body-small" color="heading" style={{ fontWeight: "700" }}>
-      {req.families?.name || "Family"}
-    </Typography>
-    <Typography variant="body-small" color="secondary">Status: {req.status}</Typography>
-    <Typography variant="body-small" color="secondary">
-      {new Date(req.created_at).toLocaleDateString()}
-    </Typography>
-  </View>
-);
-
-// ─── Small helpers ────────────────────────────────────────────────────────────
-
-const FieldLabel = ({ children }: { children: string }) => (
-  <Typography variant="body" color="heading"
-    style={{ fontWeight: "700", marginBottom: 8, marginLeft: 4, letterSpacing: 0.4 }}>
-    {children}
-  </Typography>
-);
-
-const Section = ({ children, last = false }: { children: React.ReactNode; last?: boolean }) => (
-  <View style={{ marginBottom: last ? 0 : 20 }}>{children}</View>
-);
-
-// ─── Main Screen ──────────────────────────────────────────────────────────────
-
-export default function ProfileDetails() {
+export default function EditFamilyMember() {
+  const { memberId } = useLocalSearchParams<{ memberId: string }>();
   const router = useRouter();
-  const { loadProfile, saveProfile, saving } = useUserProfile();
+  const { form, setForm, load, save, loading, saving, isDirty } =
+    useMemberProfile(memberId);
 
-  const [fullName,        setFullName]        = useState("");
-  const [dob,             setDob]             = useState("");
-  const [gender,          setGender]          = useState<Gender>("Male");
-  const [bloodGroup,      setBloodGroup]      = useState<BloodGroup>("");
-  const [height,          setHeight]          = useState("");
-  const [weight,          setWeight]          = useState("");
-  const [conditions,      setConditions]      = useState<string[]>([]);
-  const [medicalNotes,    setMedicalNotes]    = useState("");
-  const [avatarUri,       setAvatarUri]       = useState<string | null>(null);
-  const [showBloodPicker, setShowBloodPicker] = useState(false);
-
-  // Join-a-family state
-  const [inviteCode,          setInviteCode]          = useState("");
-  const [joinLoading,         setJoinLoading]         = useState(false);
-  const [joinMessage,         setJoinMessage]         = useState("");
-  const [joinMessageIsError,  setJoinMessageIsError]  = useState(false);
-  const [joinRequests,        setJoinRequests]        = useState<JoinRequestDisplay[]>([]);
-
-  // ── Load existing profile ─────────────────────────────────────────────────
+  // Special health condition toggles
+  const [isPregnant, setIsPregnant] = useState(false);
+  const [hasDiabetes, setHasDiabetes] = useState(false);
+  const [hasLiverCondition, setHasLiverCondition] = useState(false);
+  const [hasPostSurgery, setHasPostSurgery] = useState(false);
+  const [isNewborn, setIsNewborn] = useState(false);
+  const [trimester, setTrimester] = useState("2nd Trimester (Week 14-26)");
 
   useEffect(() => {
-    const init = async () => {
-      const result = await loadProfile();
-      if (result.success && result.data) {
-        setFullName(result.data.fullName);
-        setDob(result.data.dob);
-        setGender(result.data.gender);
-        setBloodGroup(result.data.bloodGroup);
-        setHeight(result.data.height);
-        setWeight(result.data.weight);
-        setAvatarUri(result.data.avatarUrl);
-        setConditions(result.data.conditions);
-        setMedicalNotes(result.data.medicalNotes);
-      }
-    };
-    init();
-  }, [loadProfile]);
+    load();
+  }, [load]);
 
-  // ── Join request handler ──────────────────────────────────────────────────
-  // New schema: join_requests uses auth_user_id (not user_id).
-  // Existence check is on family_memberships (profiles → memberships).
-
-  const handleJoinRequest = async (code: string) => {
-    setJoinLoading(true);
-    setJoinMessage("");
-    setJoinMessageIsError(false);
-    try {
-      const { data: authData } = await supabase.auth.getUser();
-      if (!authData.user) {
-        setJoinMessage("You must be logged in.");
-        setJoinMessageIsError(true);
-        return;
-      }
-
-      const authUserId = authData.user.id;
-
-      // Check if user already belongs to a family via their profile → memberships
-      const { data: myProfile } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("auth_user_id", authUserId)
-        .maybeSingle();
-
-      if (myProfile?.id) {
-        const { data: existingMembership } = await supabase
-          .from("family_memberships")
-          .select("id")
-          .eq("profile_id", myProfile.id)
-          .eq("status", "active")
-          .maybeSingle();
-
-        if (existingMembership) {
-          setJoinMessage("You already belong to a family.");
-          setJoinMessageIsError(true);
-          return;
-        }
-      }
-
-      // Look up family by invite code
-      const { data: family } = await supabase
-        .from("families")
-        .select("id")
-        .eq("invite_code", code.trim().toUpperCase())
-        .maybeSingle();
-
-      if (!family?.id) {
-        setJoinMessage("Invalid invite code. Please check and try again.");
-        setJoinMessageIsError(true);
-        return;
-      }
-
-      // Check for duplicate pending request — new schema uses auth_user_id
-      const { data: existingReq } = await supabase
-        .from("join_requests")
-        .select("id")
-        .eq("family_id", family.id)
-        .eq("auth_user_id", authUserId)
-        .maybeSingle();
-
-      if (existingReq) {
-        setJoinMessage("You already sent a request to this family.");
-        setJoinMessageIsError(true);
-        return;
-      }
-
-      // Resolve requester name from profiles table (new schema)
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("full_name")
-        .eq("auth_user_id", authUserId)
-        .maybeSingle();
-
-      const requesterName = profile?.full_name?.trim() || fullName.trim() || "Unknown";
-
-      // Insert join request — new schema: auth_user_id (not user_id), mapped_profile_id (nullable)
-      const { error } = await supabase.from("join_requests").insert({
-        family_id:        family.id,
-        auth_user_id:     authUserId,       // ← new schema field name
-        status:           "pending",
-        mapped_profile_id: null,            // admin sets this when approving
-        requester_name:   requesterName,
-      });
-
-      if (error) {
-        setJoinMessage("Failed to send request. Please try again.");
-        setJoinMessageIsError(true);
-        return;
-      }
-
-      setJoinMessage("Join request sent! Waiting for family admin to approve.");
-      setJoinMessageIsError(false);
-      setInviteCode("");
-    } finally {
-      setJoinLoading(false);
-    }
+  const update = (key: keyof MemberFormData, value: any) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
   };
 
-  // ── Avatar picker ─────────────────────────────────────────────────────────
+  const removeAllergy = (item: string) =>
+    update("allergies", form.allergies.filter((a) => a !== item));
+  const removeCondition = (item: string) =>
+    update("conditions", form.conditions.filter((c) => c !== item));
 
-  const handleAvatarPick = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== "granted") return;
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true, aspect: [1, 1], quality: 0.8,
-    });
-    if (!result.canceled) setAvatarUri(result.assets[0].uri);
+  const addAllergy = () => {
+    Alert.prompt("Add Allergy", "Enter the allergy name", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Add",
+        onPress: (val?: string) =>
+          val && update("allergies", [...form.allergies, val.trim()]),
+      },
+    ]);
   };
 
-  // ── DOB formatter ─────────────────────────────────────────────────────────
-
-  const formatDob = (text: string) => {
-    const d = text.replace(/\D/g, "").slice(0, 8);
-    if (d.length > 4) return setDob(`${d.slice(0, 2)} / ${d.slice(2, 4)} / ${d.slice(4)}`);
-    if (d.length > 2) return setDob(`${d.slice(0, 2)} / ${d.slice(2)}`);
-    setDob(d);
+  const addCondition = () => {
+    Alert.prompt("Add Condition", "Enter condition", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Add",
+        onPress: (val?: string) =>
+          val && update("conditions", [...form.conditions, val.trim()]),
+      },
+    ]);
   };
-
-  // ── Save ──────────────────────────────────────────────────────────────────
-  // conditions is now stored directly as text[] in profiles.conditions.
-  // medical_notes stores free-text only (no JSON wrapping needed anymore).
 
   const handleSave = async () => {
-    if (!fullName || !dob) {
-      Alert.alert("Missing Info", "Please enter at least your Name and Date of Birth.");
-      return;
+    try {
+      await save();
+      router.back();
+    } catch (err: any) {
+      Alert.alert("Error", err.message);
     }
-
-    const result = await saveProfile({
-      fullName,
-      dob,
-      gender,
-      bloodGroup,
-      height,
-      weight,
-      conditions,          // stored as text[] directly in profiles.conditions
-      medicalNotes,        // stored as plain text in profiles.medical_notes
-      avatarUrl: avatarUri,
-    });
-
-    if (!result.success) {
-      Alert.alert("Error", result.error || "Failed to save profile");
-      return;
-    }
-
-    router.replace("/(tabs)/onboarding/familyInfo");
   };
 
-  // ─────────────────────────────────────────────────────────────────────────
+  const handleRemove = async () => {
+    Alert.alert(
+      "Remove Member",
+      "This action will archive the member. Continue?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: async () => {
+            const { error } = await supabase
+              .from("family_memberships")
+              .update({ status: "removed" })
+              .eq("profile_id", memberId);
+            if (error) {
+              Alert.alert("Error", error.message);
+              return;
+            }
+            router.back();
+          },
+        },
+      ],
+    );
+  };
+
+  const showRelationPicker = () => {
+    const relations = ["Self", "Spouse", "Child", "Parent", "Sibling", "Other"];
+    const buttons: AlertButton[] = relations.map((r) => ({
+      text: r,
+      onPress: () => update("relation", r),
+    }));
+    buttons.push({ text: "Cancel", style: "cancel" });
+    Alert.alert("Select Relation", "", buttons);
+  };
+
+  const showBloodGroupPicker = () => {
+    const groups = ["A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"];
+    const buttons: AlertButton[] = groups.map((g) => ({
+      text: g,
+      onPress: () => update("bloodGroup", g),
+    }));
+    buttons.push({ text: "Cancel", style: "cancel" });
+    Alert.alert("Select Blood Group", "", buttons);
+  };
+
+  const showTrimesterPicker = () => {
+    const trimesters = [
+      "1st Trimester (Week 1-13)",
+      "2nd Trimester (Week 14-26)",
+      "3rd Trimester (Week 27-40)",
+    ];
+    const buttons: AlertButton[] = trimesters.map((t) => ({
+      text: t,
+      onPress: () => setTrimester(t),
+    }));
+    buttons.push({ text: "Cancel", style: "cancel" });
+    Alert.alert("Select Trimester", "", buttons);
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <ActivityIndicator size="large" color="#069594" style={{ marginTop: 100 }} />
+      </SafeAreaView>
+    );
+  }
 
   return (
-    <SafeAreaView style={{
-      flex: 1, backgroundColor: "#FFFFFF",
-      paddingTop: Platform.OS === "android" ? StatusBar.currentHeight : 0,
-    }}>
+    <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-      {/* Back button */}
-      <View style={{ paddingHorizontal: 24, paddingTop: 12, paddingBottom: 4 }}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
+          <ArrowLeft size={20} color="#334155" strokeWidth={2.2} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Edit Member</Text>
         <TouchableOpacity
-          activeOpacity={0.7}
-          onPress={() => router.back()}
-          style={{ width: 36, height: 36, alignItems: "center", justifyContent: "center" }}
+          onPress={handleSave}
+          disabled={!isDirty || saving}
+          style={styles.headerBtn}
         >
-          <ArrowLeft size={20} color="#374151" strokeWidth={2.2} />
+          {saving ? (
+            <ActivityIndicator size="small" color="#069594" />
+          ) : (
+            <Text style={[styles.saveText, isDirty && styles.saveTextActive]}>
+              Save
+            </Text>
+          )}
         </TouchableOpacity>
       </View>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 40, paddingTop: 16 }}
       >
-        {/* Progress bar */}
-        <View style={{ marginBottom: 32 }}>
-          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-            <Typography variant="body-small" color="secondary">
-              Let's set up your profile · Step 1 of 3
-            </Typography>
-            <Typography variant="body-small" color="primary" style={{ fontWeight: "700" }}>33%</Typography>
-          </View>
-          <View style={{ marginTop: 8, borderRadius: 9999, overflow: "hidden", height: 6, backgroundColor: "#E5E7EB" }}>
-            <View style={{ width: "33%", height: 6, backgroundColor: "#069594", borderRadius: 9999 }} />
-          </View>
-        </View>
-
-        {/* Heading */}
-        <View style={{ marginBottom: 32 }}>
-          <Typography variant="h2" color="heading" style={{ marginBottom: 4 }}>Tell Us About You</Typography>
-          <Typography variant="body" color="secondary">This helps doctors and labs serve you better</Typography>
-        </View>
-
-        {/* ── Join a Family ── */}
-        <Section>
-          <View style={{
-            backgroundColor: "#FFFFFF", borderRadius: 20, padding: 16,
-            borderWidth: 1, borderColor: "#E5E7EB",
-          }}>
-            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12, gap: 8 }}>
-              <Users size={18} color="#069594" strokeWidth={2} />
-              <Typography variant="body" color="heading" style={{ fontWeight: "700" }}>Join a Family</Typography>
+        {/* Avatar Section */}
+        <View style={styles.avatarSection}>
+          <View style={styles.avatarWrap}>
+            <View style={styles.avatarCircle}>
+              <Text style={styles.avatarInitials}>{getInitials(form.fullName)}</Text>
             </View>
+            <View style={styles.avatarOverlay}>
+              <Camera size={14} color="#FFFFFF" strokeWidth={1.8} />
+            </View>
+          </View>
+          <TouchableOpacity activeOpacity={0.7} style={{ marginTop: 10 }}>
+            <Text style={styles.changePhotoText}>Change Photo</Text>
+          </TouchableOpacity>
+        </View>
 
-            <Input
-              placeholder="Enter invite code (e.g., SHARMA-X7B9A)"
-              value={inviteCode}
-              onChangeText={(text) => {
-                setInviteCode(text);
-                if (joinMessage) { setJoinMessage(""); setJoinMessageIsError(false); }
-              }}
-              autoCapitalize="characters"
-              autoCorrect={false}
+        {/* Basic Info Card */}
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionHeading}>BASIC INFO</Text>
+
+          <View style={styles.fieldWrap}>
+            <Text style={styles.fieldLabel}>FULL NAME</Text>
+            <InputField
+              value={form.fullName}
+              onChangeText={(v) => update("fullName", v)}
+              placeholder="Full name"
             />
-
-            <TouchableOpacity
-              onPress={() => handleJoinRequest(inviteCode)}
-              disabled={joinLoading || !inviteCode.trim()}
-              activeOpacity={0.85}
-              style={{
-                marginTop: 12, borderRadius: 16, alignItems: "center",
-                justifyContent: "center", paddingVertical: 12,
-                backgroundColor: joinLoading || !inviteCode.trim() ? "#D1FAF8" : "#069594",
-              }}
-            >
-              <Typography variant="body-small" color="white" style={{ fontWeight: "700", letterSpacing: 0.5 }}>
-                {joinLoading ? "Sending..." : "Send Join Request"}
-              </Typography>
-            </TouchableOpacity>
-
-            {joinMessage ? (
-              <Typography
-                variant="body-small"
-                color={joinMessageIsError ? "error" : "primary"}
-                style={{ marginTop: 8, textAlign: "center" }}
-              >
-                {joinMessage}
-              </Typography>
-            ) : null}
           </View>
-        </Section>
 
-        {/* Pending join requests */}
-        {joinRequests.length > 0 && (
-          <View style={{ marginBottom: 20 }}>
-            <FieldLabel>Join Requests</FieldLabel>
-            {joinRequests.map((req) => <JoinRequestCard key={req.id} req={req} />)}
+          <View style={styles.fieldWrap}>
+            <Text style={styles.fieldLabel}>DATE OF BIRTH</Text>
+            <View style={styles.inputWithIcon}>
+              <TextInput
+                style={[styles.input, { paddingRight: 44 }]}
+                value={form.dob}
+                onChangeText={(v) => update("dob", v)}
+                placeholder="DD / MM / YYYY"
+                placeholderTextColor="#9CA3AF"
+                keyboardType="numbers-and-punctuation"
+              />
+              <View style={styles.inputIcon}>
+                <CalendarDays size={16} color="#6E7979" strokeWidth={1.8} />
+              </View>
+            </View>
           </View>
-        )}
 
-        {/* Avatar */}
-        <View style={{ alignItems: "center", marginBottom: 32 }}>
-          <TouchableOpacity onPress={handleAvatarPick} activeOpacity={0.85} style={{ position: "relative" }}>
-            <View style={{
-              width: 96, height: 96, borderRadius: 9999, borderWidth: 2,
-              borderColor: "#069594", borderStyle: "dashed", backgroundColor: "#F5F7FA",
-              alignItems: "center", justifyContent: "center", overflow: "hidden",
-            }}>
-              {avatarUri ? (
-                <Image source={{ uri: avatarUri }} style={{ width: 96, height: 96, borderRadius: 9999 }} />
-              ) : (
-                <Camera size={30} color="#069594" strokeWidth={1.8} />
-              )}
-            </View>
-            <View style={{
-              position: "absolute", width: 22, height: 22, bottom: 2, right: 2,
-              borderRadius: 9999, backgroundColor: "#069594",
-              alignItems: "center", justifyContent: "center",
-              borderWidth: 2, borderColor: "#FFFFFF",
-            }}>
-              <Plus size={12} color="#FFFFFF" strokeWidth={3} />
-            </View>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handleAvatarPick} activeOpacity={0.7} style={{ marginTop: 12 }}>
-            <Typography variant="body-small" color="primary"
-              style={{ fontWeight: "700", textAlign: "center", letterSpacing: 1.3 }}>
-              ADD YOUR PHOTO
-            </Typography>
-          </TouchableOpacity>
-        </View>
-
-        {/* Full Name */}
-        <Section>
-          <FieldLabel>Full Name</FieldLabel>
-          <Input placeholder="Enter name" value={fullName} onChangeText={setFullName} autoCapitalize="words" />
-        </Section>
-
-        {/* Date of Birth */}
-        <Section>
-          <FieldLabel>Date of Birth</FieldLabel>
-          <Input
-            placeholder="DD / MM / YYYY"
-            value={dob}
-            onChangeText={formatDob}
-            keyboardType="number-pad"
-            maxLength={14}
-            suffix={<CalendarDays size={20} color="#6B7280" strokeWidth={1.8} />}
-          />
-        </Section>
-
-        {/* Gender */}
-        <Section>
-          <FieldLabel>Gender</FieldLabel>
-          <View style={{
-            flexDirection: "row", padding: 4, borderRadius: 16,
-            backgroundColor: "#F9FAFB", borderWidth: 1, borderColor: "#E5E7EB",
-          }}>
-            {GENDERS.map((g) => {
-              const active = gender === g;
-              return (
-                <TouchableOpacity key={g} onPress={() => setGender(g)} activeOpacity={0.8} style={{
-                  flex: 1, alignItems: "center", paddingVertical: 12, borderRadius: 12,
-                  backgroundColor: active ? "#069594" : "transparent",
-                  shadowColor: active ? "#069594" : "transparent",
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: active ? 0.25 : 0,
-                  shadowRadius: 4, elevation: active ? 3 : 0,
-                }}>
-                  <Typography variant="body-small" color={active ? "white" : "heading"}
-                    style={{ fontWeight: active ? "700" : "500" }}>
+          {/* Gender */}
+          <View style={styles.fieldWrap}>
+            <Text style={styles.fieldLabel}>GENDER</Text>
+            <View style={styles.segmented}>
+              {(["Male", "Female", "Other"] as Gender[]).map((g) => (
+                <TouchableOpacity
+                  key={g}
+                  onPress={() => update("gender", g)}
+                  activeOpacity={0.8}
+                  style={[
+                    styles.segmentBtn,
+                    form.gender === g && styles.segmentBtnActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.segmentText,
+                      form.gender === g && styles.segmentTextActive,
+                    ]}
+                  >
                     {g}
-                  </Typography>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </Section>
-
-        {/* Blood Group */}
-        <Section>
-          <FieldLabel>Blood Group</FieldLabel>
-          <TouchableOpacity onPress={() => setShowBloodPicker((v) => !v)} activeOpacity={0.85}>
-            <Input
-              placeholder="Select"
-              value={bloodGroup}
-              editable={false}
-              pointerEvents="none"
-              suffix={
-                <ChevronDown
-                  size={18} color="#9CA3AF" strokeWidth={2}
-                  style={{ transform: [{ rotate: showBloodPicker ? "180deg" : "0deg" }] }}
-                />
-              }
-            />
-          </TouchableOpacity>
-          {showBloodPicker && (
-            <View style={{
-              backgroundColor: "#FFFFFF", borderRadius: 16, overflow: "hidden",
-              marginTop: 4, borderWidth: 1, borderColor: "#E5E7EB",
-              shadowColor: "#000", shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.07, shadowRadius: 8, elevation: 6,
-            }}>
-              {BLOOD_GROUPS.map((bg, i) => (
-                <TouchableOpacity key={bg} onPress={() => { setBloodGroup(bg); setShowBloodPicker(false); }}
-                  activeOpacity={0.7} style={{
-                    paddingVertical: 11, paddingHorizontal: 16,
-                    backgroundColor: bloodGroup === bg ? "rgba(6,149,148,0.08)" : "#FFFFFF",
-                    borderBottomWidth: i < BLOOD_GROUPS.length - 1 ? 1 : 0, borderBottomColor: "#F3F4F6",
-                  }}>
-                  <Typography variant="body-small" color={bloodGroup === bg ? "primary" : "default"}
-                    style={{ fontWeight: bloodGroup === bg ? "700" : "400" }}>
-                    {bg}
-                  </Typography>
+                  </Text>
                 </TouchableOpacity>
               ))}
             </View>
-          )}
-        </Section>
+          </View>
 
-        {/* Height + Weight */}
-        <Section>
-          <View style={{ flexDirection: "row", gap: 16 }}>
-            <View style={{ flex: 1 }}>
-              <FieldLabel>Height</FieldLabel>
-              <Input placeholder="175" value={height} onChangeText={setHeight}
-                keyboardType="numeric" maxLength={5} suffixText="cm" />
+          {/* Relation + Blood Group */}
+          <View style={styles.row}>
+            <View style={[styles.fieldWrap, { flex: 1, marginRight: 10 }]}>
+              <Text style={styles.fieldLabel}>RELATION</Text>
+              <TouchableOpacity onPress={showRelationPicker} style={styles.dropdown} activeOpacity={0.8}>
+                <Text style={styles.dropdownText}>{form.relation || "Select"}</Text>
+                <ChevronDown size={16} color="#6B7280" strokeWidth={2} />
+              </TouchableOpacity>
             </View>
-            <View style={{ flex: 1 }}>
-              <FieldLabel>Weight</FieldLabel>
-              <Input placeholder="70" value={weight} onChangeText={setWeight}
-                keyboardType="numeric" maxLength={5} suffixText="kg" />
+            <View style={[styles.fieldWrap, { flex: 1 }]}>
+              <Text style={styles.fieldLabel}>BLOOD GROUP</Text>
+              <TouchableOpacity onPress={showBloodGroupPicker} style={styles.dropdown} activeOpacity={0.8}>
+                <Text style={styles.dropdownText}>{form.bloodGroup || "Select"}</Text>
+                <ChevronDown size={16} color="#6B7280" strokeWidth={2} />
+              </TouchableOpacity>
             </View>
           </View>
-        </Section>
+        </View>
 
-        {/* Chronic Conditions */}
-        <Section>
-          <FieldLabel>Known Allergies & Chronic Conditions</FieldLabel>
-          <ConditionPicker selected={conditions} onChange={setConditions} />
-          {conditions.length > 0 && (
-            <Typography variant="body-small" color="secondary" style={{ marginTop: 6, marginLeft: 4 }}>
-              {conditions.length} condition{conditions.length !== 1 ? "s" : ""} selected
-            </Typography>
-          )}
-        </Section>
+        {/* Health Info Card */}
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionHeading}>HEALTH INFO</Text>
 
-        {/* Additional notes */}
-        <Section last>
-          <FieldLabel>Additional Medical Notes (optional)</FieldLabel>
-          <View style={{
-            backgroundColor: "#FFFFFF", borderRadius: 16, paddingHorizontal: 16,
-            paddingVertical: 10, borderWidth: 1, borderColor: "#E5E7EB", minHeight: 88,
-          }}>
-            <TextInput
-              value={medicalNotes}
-              onChangeText={setMedicalNotes}
-              placeholder="Any extra notes for your doctor…"
-              placeholderTextColor="#9CA3AF"
-              multiline
-              style={{ minHeight: 68, textAlignVertical: "top", color: "#111827", fontSize: 14 }}
+          <View style={styles.fieldWrap}>
+            <Text style={styles.fieldLabel}>KNOWN ALLERGIES</Text>
+            <View style={styles.tagContainer}>
+              {form.allergies.map((a) => (
+                <View key={a} style={styles.tag}>
+                  <Text style={styles.tagText}>{a}</Text>
+                  <TouchableOpacity onPress={() => removeAllergy(a)} style={styles.tagRemove}>
+                    <Text style={styles.tagRemoveText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+              <TouchableOpacity onPress={addAllergy} style={styles.addTagBtn}>
+                <Text style={styles.addTagText}>+ Add</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.fieldWrap}>
+            <Text style={styles.fieldLabel}>CHRONIC CONDITIONS</Text>
+            <View style={styles.tagContainer}>
+              {form.conditions.map((c) => (
+                <View key={c} style={styles.tag}>
+                  <Text style={styles.tagText}>{c}</Text>
+                  <TouchableOpacity onPress={() => removeCondition(c)} style={styles.tagRemove}>
+                    <Text style={styles.tagRemoveText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+              <TouchableOpacity onPress={addCondition} style={styles.addTagBtn}>
+                <Text style={styles.addTagText}>+ Add</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Height + Weight */}
+          <View style={styles.row}>
+            <View style={[styles.fieldWrap, { flex: 1, marginRight: 10 }]}>
+              <Text style={styles.fieldLabel}>HEIGHT (CM)</Text>
+              <InputField
+                value={form.height}
+                onChangeText={(v) => update("height", v)}
+                keyboardType="numeric"
+              />
+            </View>
+            <View style={[styles.fieldWrap, { flex: 1 }]}>
+              <Text style={styles.fieldLabel}>WEIGHT (KG)</Text>
+              <InputField
+                value={form.weight}
+                onChangeText={(v) => update("weight", v)}
+                keyboardType="numeric"
+              />
+            </View>
+          </View>
+        </View>
+
+        {/* Special Health Conditions Card */}
+        <View style={styles.specialCard}>
+          <Text style={styles.specialTitle}>Special Health Conditions</Text>
+          <Text style={styles.specialSubtitle}>
+            Check all that apply to receive personalized monitoring and alerts.
+          </Text>
+
+          {/* Pregnancy */}
+          <View style={styles.toggleRow}>
+            <Text style={styles.toggleLabel}>Pregnancy</Text>
+            <Switch
+              value={isPregnant}
+              onValueChange={setIsPregnant}
+              trackColor={{ false: "#E5E7EB", true: "#069594" }}
+              thumbColor="#FFFFFF"
             />
           </View>
-        </Section>
+          {isPregnant && (
+            <View style={styles.trimesterBox}>
+              <Text style={styles.trimesterLabel}>CURRENT TRIMESTER</Text>
+              <TouchableOpacity onPress={showTrimesterPicker} style={styles.trimesterDropdown} activeOpacity={0.8}>
+                <Text style={styles.trimesterText}>{trimester}</Text>
+                <ChevronDown size={16} color="#6B7280" strokeWidth={2} />
+              </TouchableOpacity>
+            </View>
+          )}
 
-        {/* CTA */}
-        <Button
-          title={saving ? "Saving..." : "Save & Continue"}
-          variant="primary"
-          rounded="full"
-          size="lg"
-          style={{ width: "100%", marginTop: 40 }}
-          disabled={saving}
-          rightIcon={<ArrowRight size={18} color="#FFFFFF" strokeWidth={2.5} />}
-          onPress={handleSave}
-        />
+          <View style={styles.divider} />
+
+          {/* Diabetes */}
+          <View style={styles.toggleRow}>
+            <Text style={styles.toggleLabel}>Diabetes</Text>
+            <Switch
+              value={hasDiabetes}
+              onValueChange={setHasDiabetes}
+              trackColor={{ false: "#E5E7EB", true: "#069594" }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+
+          <View style={styles.divider} />
+
+          {/* Liver Condition */}
+          <View style={styles.toggleRow}>
+            <Text style={styles.toggleLabel}>Liver Condition</Text>
+            <Switch
+              value={hasLiverCondition}
+              onValueChange={setHasLiverCondition}
+              trackColor={{ false: "#E5E7EB", true: "#069594" }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+
+          <View style={styles.divider} />
+
+          {/* Post-Surgery */}
+          <View style={styles.toggleRow}>
+            <Text style={styles.toggleLabel}>Post-Surgery / Wound Care</Text>
+            <Switch
+              value={hasPostSurgery}
+              onValueChange={setHasPostSurgery}
+              trackColor={{ false: "#E5E7EB", true: "#069594" }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+
+          <View style={styles.divider} />
+
+          {/* Newborn */}
+          <View style={styles.toggleRow}>
+            <Text style={styles.toggleLabel}>Newborn</Text>
+            <Switch
+              value={isNewborn}
+              onValueChange={setIsNewborn}
+              trackColor={{ false: "#E5E7EB", true: "#069594" }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+        </View>
+
+        {/* Emergency Contact Card */}
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionHeading}>EMERGENCY CONTACT</Text>
+
+          <View style={styles.fieldWrap}>
+            <Text style={styles.fieldLabel}>CONTACT NAME</Text>
+            <TextInput
+              style={styles.input}
+              // value={form.emergencyContactName}
+              // onChangeText={(v) => update("emergencyContactName", v)}
+              placeholder="Contact name"
+              placeholderTextColor="#9CA3AF"
+            />
+          </View>
+
+          <View style={[styles.fieldWrap, { marginBottom: 0 }]}>
+            <Text style={styles.fieldLabel}>PHONE NUMBER</Text>
+            <View style={styles.inputWithIcon}>
+              <TextInput
+                style={[styles.input, { paddingRight: 44 }]}
+                // value={form.emergencyContactPhone}
+                // onChangeText={(v) => update("emergencyContactPhone", v)}
+                placeholder="+1 (555) 000-0000"
+                placeholderTextColor="#9CA3AF"
+                keyboardType="phone-pad"
+              />
+              <View style={styles.inputIcon}>
+                <Phone size={16} color="#6E7979" strokeWidth={1.8} />
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* Remove Member */}
+        <TouchableOpacity onPress={handleRemove} style={styles.removeBtn} activeOpacity={0.85}>
+          <Text style={styles.removeBtnText}>Remove This Member</Text>
+        </TouchableOpacity>
+        <Text style={styles.dangerNote}>
+          All health history and associated vitals for this member will be permanently archived.
+        </Text>
+
+        <View style={{ height: 40 }} />
       </ScrollView>
     </SafeAreaView>
   );
 }
+
+function getInitials(name: string) {
+  return (name || "")
+    .split(" ")
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+}
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: "#F5F7FA" },
+
+  /* Header */
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 14,
+    backgroundColor: "#FFFFFF",
+    borderBottomWidth: 0,
+  },
+  headerBtn: {
+    width: 52,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerTitle: {
+    flex: 1,
+    textAlign: "center",
+    fontWeight: "700",
+    fontSize: 17,
+    color: "#0F172A",
+    letterSpacing: -0.3,
+  },
+  saveText: { color: "#CBD5E1", fontSize: 16, fontWeight: "600" },
+  saveTextActive: { color: "#069594", fontSize: 16, fontWeight: "600" },
+
+  scroll: { paddingHorizontal: 16, paddingTop: 20 },
+
+  /* Avatar */
+  avatarSection: { alignItems: "center", marginBottom: 20 },
+  avatarWrap: { position: "relative" },
+  avatarCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "#1A1A2E",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  avatarInitials: { fontWeight: "700", color: "#FFFFFF", fontSize: 24 },
+  avatarOverlay: {
+    position: "absolute",
+    right: 0,
+    bottom: 0,
+    backgroundColor: "#069594",
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#F5F7FA",
+  },
+  changePhotoText: { color: "#069594", fontWeight: "600", fontSize: 15 },
+
+  /* Section card */
+  sectionCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+  },
+  sectionHeading: {
+    fontWeight: "700",
+    color: "#9CA3AF",
+    fontSize: 11,
+    letterSpacing: 0.8,
+    marginBottom: 14,
+  },
+
+  /* Fields */
+  fieldWrap: { marginBottom: 14 },
+  fieldLabel: {
+    fontWeight: "700",
+    fontSize: 11,
+    letterSpacing: 0.6,
+    color: "#374151",
+    marginBottom: 7,
+  },
+  input: {
+    height: 46,
+    borderWidth: 1.5,
+    borderColor: "#E5E7EB",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    backgroundColor: "#FFFFFF",
+    fontSize: 15,
+    color: "#111827",
+  },
+  inputWithIcon: { position: "relative" },
+  inputIcon: { position: "absolute", right: 14, top: 15 },
+
+  /* Gender segmented */
+  segmented: { flexDirection: "row" },
+  segmentBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: "#F3F4F6",
+    marginRight: 8,
+  },
+  segmentBtnActive: { backgroundColor: "#069594" },
+  segmentText: { color: "#374151", fontSize: 14, fontWeight: "500" },
+  segmentTextActive: { color: "#FFFFFF", fontWeight: "600" },
+
+  /* Dropdown */
+  row: { flexDirection: "row" },
+  dropdown: {
+    height: 46,
+    borderWidth: 1.5,
+    borderColor: "#E5E7EB",
+    borderRadius: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    backgroundColor: "#FFFFFF",
+  },
+  dropdownText: { color: "#111827", fontSize: 15 },
+
+  /* Tags */
+  tagContainer: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  tag: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#E6F6F6",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+  },
+  tagText: { marginRight: 6, color: "#0F766E", fontSize: 13, fontWeight: "600" },
+  tagRemove: { padding: 2 },
+  tagRemoveText: { color: "#0F766E", fontSize: 12, fontWeight: "700" },
+  addTagBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: "#F3F4F6",
+  },
+  addTagText: { color: "#374151", fontSize: 13, fontWeight: "600" },
+
+  /* Special Health Conditions */
+  specialCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+  },
+  specialTitle: {
+    fontWeight: "700",
+    fontSize: 17,
+    color: "#111827",
+    marginBottom: 6,
+  },
+  specialSubtitle: {
+    color: "#6B7280",
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 16,
+  },
+  toggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+  },
+  toggleLabel: { fontSize: 15, fontWeight: "500", color: "#111827" },
+  divider: { height: 1, backgroundColor: "#F3F4F6" },
+
+  /* Trimester box */
+  trimesterBox: {
+    borderLeftWidth: 3,
+    borderLeftColor: "#069594",
+    paddingLeft: 12,
+    marginBottom: 10,
+    marginTop: 4,
+  },
+  trimesterLabel: {
+    fontWeight: "700",
+    fontSize: 10,
+    letterSpacing: 0.6,
+    color: "#6B7280",
+    marginBottom: 6,
+  },
+  trimesterDropdown: {
+    height: 44,
+    borderWidth: 1.5,
+    borderColor: "#E5E7EB",
+    borderRadius: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    backgroundColor: "#FFFFFF",
+  },
+  trimesterText: { color: "#111827", fontSize: 14 },
+
+  /* Remove / Danger */
+  removeBtn: {
+    backgroundColor: "#EF4444",
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: "center",
+    marginBottom: 10,
+    marginTop: 12,
+  },
+  removeBtnText: { color: "#FFFFFF", fontWeight: "700", fontSize: 16 },
+  dangerNote: {
+    color: "#9CA3AF",
+    fontSize: 12,
+    textAlign: "center",
+    lineHeight: 16,
+    marginBottom: 4,
+  },
+});

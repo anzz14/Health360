@@ -1,253 +1,263 @@
-import { Link } from "expo-router";
+import { Input } from "@/components/inputs/input";
 import {
-    ArrowLeft,
-    CalendarDays,
-    Camera,
-    ChevronDown,
-    Phone,
-    Plus,
-    X,
-} from "lucide-react-native";
-
+  Gender,
+  MemberFormData,
+  useMemberProfile,
+} from "@/hooks/useMemberProfile";
+import { supabase } from "@/lib/supabase";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useState } from "react";
 import {
-    Alert,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleProp,
-    StyleSheet,
-    Switch,
-    Text,
-    TextInput,
-    TextInputProps,
-    TouchableOpacity,
-    View,
-    ViewStyle,
+  ArrowLeft,
+  CalendarDays,
+  Camera,
+  ChevronDown,
+  Phone,
+} from "lucide-react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Modal,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
-// ─── Mock Initial State ───────────────────────────────────────────────────────
+// ─── Reusable in‑page picker modal ──────────────────────────────────────────
 
-const RELATIONS = ["Self", "Spouse", "Child", "Parent", "Sibling", "Other"];
-const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"];
-const TRIMESTERS = [
-  "1st Trimester (Week 1-13)",
-  "2nd Trimester (Week 14-26)",
-  "3rd Trimester (Week 27-40)",
-];
-
-const INITIAL = {
-  fullName: "Eleanor Shellstrop",
-  dob: "14 / 05 / 1982",
-  gender: "Male",
-  relation: "Spouse",
-  bloodGroup: "O +ve",
-  allergies: ["Peanuts", "Latex"],
-  conditions: ["Asthma"],
-  height: "168",
-  weight: "62",
-  pregnancy: true,
-  trimester: "2nd Trimester (Week 14-26)",
-  diabetes: false,
-  liverCondition: false,
-  postSurgery: false,
-  newborn: false,
-  contactName: "Chidi Anagonye",
-  contactPhone: "+1 (555) 012-3456",
-};
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-const FieldLabel = ({ label }: { label: string }) => (
-  <Text style={styles.fieldLabel}>{label}</Text>
-);
-
-const InputField = ({
-  value,
-  onChangeText,
-  placeholder,
-  keyboardType,
+function PickerModal({
+  visible,
+  title,
+  options,
+  selected,
+  onSelect,
+  onClose,
 }: {
-  value: string;
-  onChangeText: (v: string) => void;
-  placeholder?: string;
-  keyboardType?: TextInputProps["keyboardType"];
-}) => (
-  <TextInput
-    style={styles.input}
-    value={value}
-    onChangeText={onChangeText}
-    placeholder={placeholder}
-    placeholderTextColor="#9CA3AF"
-    keyboardType={(keyboardType as any) || "default"}
-  />
-);
-
-const SectionCard = ({
-  children,
-  style,
-}: {
-  children: React.ReactNode;
-  style?: StyleProp<ViewStyle> | undefined;
-}) => <View style={[styles.sectionCard, style]}>{children}</View>;
-
-const SectionHeading = ({ label }: { label: string }) => (
-  <Text style={styles.sectionHeading}>{label}</Text>
-);
-
-const ToggleRow = ({
-  label,
-  value,
-  onValueChange,
-}: {
-  label: string;
-  value: boolean;
-  onValueChange: (v: boolean) => void;
-}) => (
-  <View style={styles.toggleRow}>
-    <Text style={styles.toggleLabel}>{label}</Text>
-    <Switch
-      value={value}
-      onValueChange={onValueChange}
-      trackColor={{ false: "#E6E8EB", true: "#069594" }}
-      thumbColor="#FFFFFF"
-      ios_backgroundColor="#E6E8EB"
-      style={
-        Platform.OS === "android"
-          ? { transform: [{ scaleX: 0.9 }, { scaleY: 0.9 }] }
-          : {}
-      }
-    />
-  </View>
-);
-
-const Tag = ({ label, onRemove }: { label: string; onRemove: () => void }) => (
-  <View style={styles.tag}>
-    <Text style={styles.tagText}>{label}</Text>
-    <TouchableOpacity
-      onPress={onRemove}
-      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-    >
-      <X size={10} color="#069594" strokeWidth={2.5} />
-    </TouchableOpacity>
-  </View>
-);
-
-const AddTag = ({ onPress }: { onPress: () => void }) => (
-  <TouchableOpacity
-    onPress={onPress}
-    style={styles.addTagBtn}
-    activeOpacity={0.7}
-  >
-    <Plus size={10} color="#069594" strokeWidth={2.5} />
-    <Text style={styles.addTagText}>Add</Text>
-  </TouchableOpacity>
-);
-
-const DropdownField = ({
-  value,
-  onPress,
-}: {
-  value: string;
-  onPress: () => void;
-}) => (
-  <TouchableOpacity
-    style={styles.dropdown}
-    onPress={onPress}
-    activeOpacity={0.8}
-  >
-    <Text style={styles.dropdownText}>{value}</Text>
-    <ChevronDown size={16} color="#6B7280" strokeWidth={1.8} />
-  </TouchableOpacity>
-);
-
-// ─── Main Screen ──────────────────────────────────────────────────────────────
-
-export default function EditFamilyMember({
-  onBack,
-  onSave,
-}: {
-  onBack?: () => void;
-  onSave?: (form: any) => void;
+  visible: boolean;
+  title: string;
+  options: string[];
+  selected?: string;
+  onSelect: (value: string) => void;
+  onClose: () => void;
 }) {
+  return (
+    <Modal visible={visible} animationType="slide" transparent>
+      <View style={styles.pickerBackdrop}>
+        <View style={styles.pickerSheet}>
+          <Text style={styles.pickerTitle}>{title}</Text>
+          <FlatList
+            data={options}
+            keyExtractor={(item) => item}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={[
+                  styles.pickerOption,
+                  item === selected && styles.pickerOptionSelected,
+                ]}
+                onPress={() => {
+                  onSelect(item);
+                  onClose();
+                }}
+              >
+                <Text
+                  style={[
+                    styles.pickerOptionText,
+                    item === selected && styles.pickerOptionTextSelected,
+                  ]}
+                >
+                  {item}
+                </Text>
+              </TouchableOpacity>
+            )}
+            ItemSeparatorComponent={() => <View style={styles.pickerSeparator} />}
+          />
+          <TouchableOpacity onPress={onClose} style={styles.pickerCancel}>
+            <Text style={styles.pickerCancelText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
 
-    const { memberId } = useLocalSearchParams<{ memberId: string }>();
+// ─── Main screen component ──────────────────────────────────────────────────
+
+export default function EditFamilyMember() {
+  const { memberId } = useLocalSearchParams<{ memberId: string }>();
   const router = useRouter();
-  const [form, setForm] = useState(INITIAL as any);
-  const [isDirty, setIsDirty] = useState(false);
+  const { form, setForm, load, save, loading, saving, isDirty } =
+    useMemberProfile(memberId);
 
-  const update = (key: string, val: any) => {
-    setForm((f: any) => ({ ...f, [key]: val }));
-    setIsDirty(true);
+  // Special health condition toggles (local state, not yet persisted – you can hook them later)
+  const [isPregnant, setIsPregnant] = useState(false);
+  const [hasDiabetes, setHasDiabetes] = useState(false);
+  const [hasLiverCondition, setHasLiverCondition] = useState(false);
+  const [hasPostSurgery, setHasPostSurgery] = useState(false);
+  const [isNewborn, setIsNewborn] = useState(false);
+  const [trimester, setTrimester] = useState("2nd Trimester (Week 14-26)");
+
+  // Picker state
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const [pickerTitle, setPickerTitle] = useState("");
+  const [pickerOptions, setPickerOptions] = useState<string[]>([]);
+  const [pickerCallback, setPickerCallback] = useState<(val: string) => void>(
+    () => {}
+  );
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // ─── Helpers ───────────────────────────────────────────────────────────
+
+  const update = (key: keyof MemberFormData, value: any) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
   };
 
   const removeAllergy = (item: string) =>
-    update(
-      "allergies",
-      (form.allergies as string[]).filter((a) => a !== item),
-    );
+    update("allergies", form.allergies.filter((a) => a !== item));
 
   const removeCondition = (item: string) =>
-    update(
-      "conditions",
-      (form.conditions as string[]).filter((c) => c !== item),
-    );
+    update("conditions", form.conditions.filter((c) => c !== item));
 
-  const handleSave = () => {
-    if (!isDirty) return;
-    onSave?.(form);
+  const addAllergy = () => {
+    Alert.prompt("Add Allergy", "Enter the allergy name", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Add",
+        onPress: (val?: string) =>
+          val && update("allergies", [...form.allergies, val.trim()]),
+      },
+    ]);
   };
 
-  const handleRemove = () => {
+  const addCondition = () => {
+    Alert.prompt("Add Condition", "Enter condition", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Add",
+        onPress: (val?: string) =>
+          val && update("conditions", [...form.conditions, val.trim()]),
+      },
+    ]);
+  };
+
+  // Universal picker opener
+  const openPicker = (
+    title: string,
+    options: string[],
+    callback: (val: string) => void
+  ) => {
+    setPickerTitle(title);
+    setPickerOptions(options);
+    setPickerCallback(() => callback);
+    setPickerVisible(true);
+  };
+
+  // Specific pickers
+  const showRelationPicker = () => {
+    openPicker("Relation", ["Self", "Spouse", "Child", "Parent", "Sibling", "Other"], (val) =>
+      update("relation", val)
+    );
+  };
+
+  const showBloodGroupPicker = () => {
+    openPicker("Blood Group", ["A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"], (val) =>
+      update("bloodGroup", val)
+    );
+  };
+
+  const showTrimesterPicker = () => {
+    openPicker("Trimester", [
+      "1st Trimester (Week 1-13)",
+      "2nd Trimester (Week 14-26)",
+      "3rd Trimester (Week 27-40)",
+    ], setTrimester);
+  };
+
+  const handleSave = async () => {
+    try {
+      await save();
+      router.back();
+    } catch (err: any) {
+      Alert.alert("Error", err.message);
+    }
+  };
+
+  const handleRemove = async () => {
     Alert.alert(
       "Remove Member",
-      "All health history and associated vitals for this member will be permanently archived. Continue?",
+      "This action will archive the member. Continue?",
       [
         { text: "Cancel", style: "cancel" },
         {
           text: "Remove",
           style: "destructive",
-          onPress: () => console.log("Removed"),
+          onPress: async () => {
+            const { error } = await supabase
+              .from("family_memberships")
+              .update({ status: "removed" })
+              .eq("profile_id", memberId);
+            if (error) {
+              Alert.alert("Error", error.message);
+              return;
+            }
+            router.back();
+          },
         },
-      ],
+      ]
     );
   };
+
+  // Current selected item for picker highlight
+  const currentPickerSelected = useMemo(() => {
+    if (pickerTitle === "Relation") return form.relation;
+    if (pickerTitle === "Blood Group") return form.bloodGroup;
+    if (pickerTitle === "Trimester") return trimester;
+    return undefined;
+  }, [pickerTitle, form.relation, form.bloodGroup, trimester]);
+
+  // ─── Loading state ──────────────────────────────────────────────────────
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <ActivityIndicator size="large" color="#069594" style={{ marginTop: 100 }} />
+      </SafeAreaView>
+    );
+  }
+
+  // ─── Main render ────────────────────────────────────────────────────────
 
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-      {/* ── Header ── */}
+      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          onPress={onBack}
-          activeOpacity={0.7}
-          style={styles.headerBtn}
-        >
-          <TouchableOpacity
-  onPress={() =>
-    router.push({
-      pathname: "/manageFamily/Memberdetailprofile",
-      params: { memberId },
-    })
-  }
-  activeOpacity={0.7}
-  style={styles.headerBtn}
->
-  <ArrowLeft size={20} color="#334155" strokeWidth={2.2} />
-</TouchableOpacity>
+        <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
+          <ArrowLeft size={20} color="#334155" strokeWidth={2.2} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Edit Member</Text>
         <TouchableOpacity
           onPress={handleSave}
-          activeOpacity={isDirty ? 0.7 : 1}
+          disabled={!isDirty || saving}
           style={styles.headerBtn}
         >
-          <Text style={[styles.saveText, isDirty && styles.saveTextActive]}>
-            Save
-          </Text>
+          {saving ? (
+            <ActivityIndicator size="small" color="#069594" />
+          ) : (
+            <Text style={[styles.saveText, isDirty && styles.saveTextActive]}>
+              Save
+            </Text>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -256,43 +266,41 @@ export default function EditFamilyMember({
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
       >
-        {/* ── Avatar Section ── */}
+        {/* Avatar Section */}
         <View style={styles.avatarSection}>
           <View style={styles.avatarWrap}>
-            {/* Avatar image / fallback */}
             <View style={styles.avatarCircle}>
-              <Text style={styles.avatarInitials}>ES</Text>
+              <Text style={styles.avatarInitials}>{getInitials(form.fullName)}</Text>
             </View>
-            {/* Dark overlay + camera icon */}
             <View style={styles.avatarOverlay}>
-              <Camera size={20} color="#FFFFFF" strokeWidth={1.8} />
+              <Camera size={14} color="#FFFFFF" strokeWidth={1.8} />
             </View>
           </View>
-          <TouchableOpacity activeOpacity={0.7} style={{ marginTop: 12 }}>
+          <TouchableOpacity activeOpacity={0.7} style={{ marginTop: 10 }}>
             <Text style={styles.changePhotoText}>Change Photo</Text>
           </TouchableOpacity>
         </View>
 
-        {/* ── Basic Info ── */}
-        <SectionCard>
-          <SectionHeading label="BASIC INFO" />
+        {/* Basic Info Card */}
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionHeading}>BASIC INFO</Text>
 
           <View style={styles.fieldWrap}>
-            <FieldLabel label="FULL NAME" />
-            <InputField
+            <Text style={styles.fieldLabel}>FULL NAME</Text>
+            <Input
               value={form.fullName}
-              onChangeText={(v: string) => update("fullName", v)}
+              onChangeText={(v) => update("fullName", v)}
               placeholder="Full name"
             />
           </View>
 
           <View style={styles.fieldWrap}>
-            <FieldLabel label="DATE OF BIRTH" />
+            <Text style={styles.fieldLabel}>DATE OF BIRTH</Text>
             <View style={styles.inputWithIcon}>
               <TextInput
                 style={[styles.input, { paddingRight: 44 }]}
                 value={form.dob}
-                onChangeText={(v: string) => update("dob", v)}
+                onChangeText={(v) => update("dob", v)}
                 placeholder="DD / MM / YYYY"
                 placeholderTextColor="#9CA3AF"
                 keyboardType="numbers-and-punctuation"
@@ -303,11 +311,11 @@ export default function EditFamilyMember({
             </View>
           </View>
 
-          {/* Gender segmented */}
+          {/* Gender */}
           <View style={styles.fieldWrap}>
-            <FieldLabel label="GENDER" />
+            <Text style={styles.fieldLabel}>GENDER</Text>
             <View style={styles.segmented}>
-              {["Male", "Female", "Other"].map((g) => (
+              {(["Male", "Female", "Other"] as Gender[]).map((g) => (
                 <TouchableOpacity
                   key={g}
                   onPress={() => update("gender", g)}
@@ -330,494 +338,519 @@ export default function EditFamilyMember({
             </View>
           </View>
 
-          {/* Relation + Blood Group side by side */}
+          {/* Relation + Blood Group */}
           <View style={styles.row}>
             <View style={[styles.fieldWrap, { flex: 1, marginRight: 10 }]}>
-              <FieldLabel label="RELATION" />
-              <DropdownField value={form.relation} onPress={() => {}} />
+              <Text style={styles.fieldLabel}>RELATION</Text>
+              <TouchableOpacity
+                onPress={showRelationPicker}
+                style={styles.dropdown}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.dropdownText}>
+                  {form.relation || "Select"}
+                </Text>
+                <ChevronDown size={16} color="#6B7280" strokeWidth={2} />
+              </TouchableOpacity>
             </View>
             <View style={[styles.fieldWrap, { flex: 1 }]}>
-              <FieldLabel label="BLOOD GROUP" />
-              <DropdownField value={form.bloodGroup} onPress={() => {}} />
+              <Text style={styles.fieldLabel}>BLOOD GROUP</Text>
+              <TouchableOpacity
+                onPress={showBloodGroupPicker}
+                style={styles.dropdown}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.dropdownText}>
+                  {form.bloodGroup || "Select"}
+                </Text>
+                <ChevronDown size={16} color="#6B7280" strokeWidth={2} />
+              </TouchableOpacity>
             </View>
           </View>
-        </SectionCard>
+        </View>
 
-        {/* ── Health Info ── */}
-        <SectionCard>
-          <SectionHeading label="HEALTH INFO" />
+        {/* Health Info Card */}
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionHeading}>HEALTH INFO</Text>
 
-          {/* Known Allergies */}
           <View style={styles.fieldWrap}>
-            <FieldLabel label="KNOWN ALLERGIES" />
+            <Text style={styles.fieldLabel}>KNOWN ALLERGIES</Text>
             <View style={styles.tagContainer}>
-              {form.allergies.map((a: string) => (
-                <Tag key={a} label={a} onRemove={() => removeAllergy(a)} />
+              {form.allergies.map((a) => (
+                <View key={a} style={styles.tag}>
+                  <Text style={styles.tagText}>{a}</Text>
+                  <TouchableOpacity
+                    onPress={() => removeAllergy(a)}
+                    style={styles.tagRemove}
+                  >
+                    <Text style={styles.tagRemoveText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
               ))}
-              <AddTag onPress={() => {}} />
+              <TouchableOpacity onPress={addAllergy} style={styles.addTagBtn}>
+                <Text style={styles.addTagText}>+ Add</Text>
+              </TouchableOpacity>
             </View>
           </View>
 
-          {/* Chronic Conditions */}
           <View style={styles.fieldWrap}>
-            <FieldLabel label="CHRONIC CONDITIONS" />
+            <Text style={styles.fieldLabel}>CHRONIC CONDITIONS</Text>
             <View style={styles.tagContainer}>
-              {form.conditions.map((c: string) => (
-                <Tag key={c} label={c} onRemove={() => removeCondition(c)} />
+              {form.conditions.map((c) => (
+                <View key={c} style={styles.tag}>
+                  <Text style={styles.tagText}>{c}</Text>
+                  <TouchableOpacity
+                    onPress={() => removeCondition(c)}
+                    style={styles.tagRemove}
+                  >
+                    <Text style={styles.tagRemoveText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
               ))}
-              <AddTag onPress={() => {}} />
+              <TouchableOpacity onPress={addCondition} style={styles.addTagBtn}>
+                <Text style={styles.addTagText}>+ Add</Text>
+              </TouchableOpacity>
             </View>
           </View>
 
-          {/* Height + Weight side by side */}
+          {/* Height + Weight */}
           <View style={styles.row}>
             <View style={[styles.fieldWrap, { flex: 1, marginRight: 10 }]}>
-              <FieldLabel label="HEIGHT (CM)" />
-              <InputField
+              <Text style={styles.fieldLabel}>HEIGHT (CM)</Text>
+              <Input
                 value={form.height}
-                onChangeText={(v: string) => update("height", v)}
+                onChangeText={(v) => update("height", v)}
                 keyboardType="numeric"
               />
             </View>
             <View style={[styles.fieldWrap, { flex: 1 }]}>
-              <FieldLabel label="WEIGHT (KG)" />
-              <InputField
+              <Text style={styles.fieldLabel}>WEIGHT (KG)</Text>
+              <Input
                 value={form.weight}
-                onChangeText={(v: string) => update("weight", v)}
+                onChangeText={(v) => update("weight", v)}
                 keyboardType="numeric"
               />
             </View>
           </View>
-        </SectionCard>
+        </View>
 
-        {/* ── Special Health Conditions ── */}
-        <SectionCard>
+        {/* Special Health Conditions Card */}
+        <View style={styles.specialCard}>
           <Text style={styles.specialTitle}>Special Health Conditions</Text>
           <Text style={styles.specialSubtitle}>
             Check all that apply to receive personalized monitoring and alerts.
           </Text>
 
-          {/* Pregnancy */}
-          <ToggleRow
-            label="Pregnancy"
-            value={form.pregnancy}
-            onValueChange={(v: boolean) => update("pregnancy", v)}
-          />
-
-          {/* Trimester — shown only when pregnancy ON */}
-          {form.pregnancy && (
-            <View style={styles.trimesterWrap}>
-              <View style={styles.trimesterBorder} />
-              <View style={styles.trimesterContent}>
-                <FieldLabel label="CURRENT TRIMESTER" />
-                <DropdownField value={form.trimester} onPress={() => {}} />
-              </View>
+          <View style={styles.toggleRow}>
+            <Text style={styles.toggleLabel}>Pregnancy</Text>
+            <Switch
+              value={isPregnant}
+              onValueChange={setIsPregnant}
+              trackColor={{ false: "#E5E7EB", true: "#069594" }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+          {isPregnant && (
+            <View style={styles.trimesterBox}>
+              <Text style={styles.trimesterLabel}>CURRENT TRIMESTER</Text>
+              <TouchableOpacity
+                onPress={showTrimesterPicker}
+                style={styles.trimesterDropdown}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.trimesterText}>{trimester}</Text>
+                <ChevronDown size={16} color="#6B7280" strokeWidth={2} />
+              </TouchableOpacity>
             </View>
           )}
 
-          <ToggleRow
-            label="Diabetes"
-            value={form.diabetes}
-            onValueChange={(v: boolean) => update("diabetes", v)}
-          />
-          <ToggleRow
-            label="Liver Condition"
-            value={form.liverCondition}
-            onValueChange={(v: boolean) => update("liverCondition", v)}
-          />
-          <ToggleRow
-            label="Post-Surgery / Wound Care"
-            value={form.postSurgery}
-            onValueChange={(v: boolean) => update("postSurgery", v)}
-          />
-          <ToggleRow
-            label="Newborn"
-            value={form.newborn}
-            onValueChange={(v: boolean) => update("newborn", v)}
-          />
-        </SectionCard>
+          <View style={styles.divider} />
 
-        {/* ── Emergency Contact ── */}
-        <SectionCard>
-          <SectionHeading label="EMERGENCY CONTACT" />
-
-          <View style={styles.fieldWrap}>
-            <FieldLabel label="CONTACT NAME" />
-            <InputField
-              value={form.contactName}
-              onChangeText={(v: string) => update("contactName", v)}
-              placeholder="Contact name"
+          <View style={styles.toggleRow}>
+            <Text style={styles.toggleLabel}>Diabetes</Text>
+            <Switch
+              value={hasDiabetes}
+              onValueChange={setHasDiabetes}
+              trackColor={{ false: "#E5E7EB", true: "#069594" }}
+              thumbColor="#FFFFFF"
             />
           </View>
 
+          <View style={styles.divider} />
+
+          <View style={styles.toggleRow}>
+            <Text style={styles.toggleLabel}>Liver Condition</Text>
+            <Switch
+              value={hasLiverCondition}
+              onValueChange={setHasLiverCondition}
+              trackColor={{ false: "#E5E7EB", true: "#069594" }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+
+          <View style={styles.divider} />
+
+          <View style={styles.toggleRow}>
+            <Text style={styles.toggleLabel}>Post-Surgery / Wound Care</Text>
+            <Switch
+              value={hasPostSurgery}
+              onValueChange={setHasPostSurgery}
+              trackColor={{ false: "#E5E7EB", true: "#069594" }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+
+          <View style={styles.divider} />
+
+          <View style={styles.toggleRow}>
+            <Text style={styles.toggleLabel}>Newborn</Text>
+            <Switch
+              value={isNewborn}
+              onValueChange={setIsNewborn}
+              trackColor={{ false: "#E5E7EB", true: "#069594" }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+        </View>
+
+        {/* Emergency Contact Card (placeholders for now) */}
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionHeading}>EMERGENCY CONTACT</Text>
+
           <View style={styles.fieldWrap}>
-            <FieldLabel label="PHONE NUMBER" />
+            <Text style={styles.fieldLabel}>CONTACT NAME</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Contact name"
+              placeholderTextColor="#9CA3AF"
+            />
+          </View>
+
+          <View style={[styles.fieldWrap, { marginBottom: 0 }]}>
+            <Text style={styles.fieldLabel}>PHONE NUMBER</Text>
             <View style={styles.inputWithIcon}>
               <TextInput
                 style={[styles.input, { paddingRight: 44 }]}
-                value={form.contactPhone}
-                onChangeText={(v) => update("contactPhone", v)}
                 placeholder="+1 (555) 000-0000"
                 placeholderTextColor="#9CA3AF"
                 keyboardType="phone-pad"
               />
               <View style={styles.inputIcon}>
-                <Phone size={15} color="#6E7979" strokeWidth={1.8} />
+                <Phone size={16} color="#6E7979" strokeWidth={1.8} />
               </View>
             </View>
           </View>
-        </SectionCard>
-
-        {/* ── Danger Zone ── */}
-        <View style={styles.dangerZone}>
-          <TouchableOpacity
-            onPress={handleRemove}
-            activeOpacity={0.88}
-            style={styles.removeBtn}
-          >
-            <Text style={styles.removeBtnText}>Remove This Member</Text>
-          </TouchableOpacity>
-          <Text style={styles.dangerNote}>
-            All health history and associated vitals for this member will be
-            permanently archived.
-          </Text>
         </View>
+
+        {/* Remove Member */}
+        <TouchableOpacity
+          onPress={handleRemove}
+          style={styles.removeBtn}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.removeBtnText}>Remove This Member</Text>
+        </TouchableOpacity>
+        <Text style={styles.dangerNote}>
+          All health history and associated vitals for this member will be
+          permanently archived.
+        </Text>
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* Picker modal – rendered outside of ScrollView to avoid clipping */}
+      <PickerModal
+        visible={pickerVisible}
+        title={pickerTitle}
+        options={pickerOptions}
+        selected={currentPickerSelected}
+        onSelect={pickerCallback}
+        onClose={() => setPickerVisible(false)}
+      />
     </SafeAreaView>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+function getInitials(name: string) {
+  return (name || "")
+    .split(" ")
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+}
+
+// ─── Styles ──────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: "#F7F9FC",
-    paddingTop: Platform.OS === "android" ? StatusBar.currentHeight : 0,
-  },
+  safe: { flex: 1, backgroundColor: "#F5F7FA" },
 
-  // ── Header ──
+  /* Header */
   header: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: "rgba(255,255,255,0.95)",
+    paddingHorizontal: 8,
+    paddingVertical: 14,
+    backgroundColor: "#FFFFFF",
     borderBottomWidth: 0,
-    shadowColor: "#4C56AF",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 16,
-    elevation: 4,
-    zIndex: 10,
   },
   headerBtn: {
-    width: 48,
-    height: 36,
+    width: 52,
     alignItems: "center",
     justifyContent: "center",
   },
   headerTitle: {
-    fontSize: 20,
+    flex: 1,
+    textAlign: "center",
     fontWeight: "700",
-    color: "#334155",
-    letterSpacing: -0.5,
+    fontSize: 17,
+    color: "#0F172A",
+    letterSpacing: -0.3,
   },
-  saveText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#94A3B8",
-    textAlign: "right",
-  },
-  saveTextActive: {
-    color: "#069594",
-  },
+  saveText: { color: "#CBD5E1", fontSize: 16, fontWeight: "600" },
+  saveTextActive: { color: "#069594", fontSize: 16, fontWeight: "600" },
 
-  // ── Scroll ──
-  scroll: {
-    paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: 40,
-    gap: 20,
-  },
+  scroll: { paddingHorizontal: 16, paddingTop: 20 },
 
-  // ── Avatar ──
-  avatarSection: {
-    alignItems: "center",
-    marginBottom: 4,
-  },
-  avatarWrap: {
-    width: 88,
-    height: 88,
-    borderRadius: 9999,
-    overflow: "hidden",
-    borderWidth: 4,
-    borderColor: "#FFFFFF",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 6,
-    position: "relative",
-  },
+  /* Avatar */
+  avatarSection: { alignItems: "center", marginBottom: 20 },
+  avatarWrap: { position: "relative" },
   avatarCircle: {
-    width: "100%",
-    height: "100%",
-    backgroundColor: "#CBD5F5",
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "#1A1A2E",
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
   },
-  avatarInitials: {
-    fontSize: 26,
-    fontWeight: "800",
-    color: "#4C56AF",
-  },
+  avatarInitials: { fontWeight: "700", color: "#FFFFFF", fontSize: 24 },
   avatarOverlay: {
     position: "absolute",
-    top: 0,
-    left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.42)",
+    backgroundColor: "#069594",
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#F5F7FA",
   },
-  changePhotoText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#069594",
-  },
+  changePhotoText: { color: "#069594", fontWeight: "600", fontSize: 15 },
 
-  // ── Section Card ──
+  /* Section card */
   sectionCard: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 32,
-    padding: 24,
-    shadowColor: "#4C56AF",
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.06,
-    shadowRadius: 32,
-    elevation: 4,
-    gap: 16,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
   },
   sectionHeading: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#334155",
-    letterSpacing: 1.2,
-    textTransform: "uppercase",
-    opacity: 0.6,
+    fontWeight: "700",
+    color: "#9CA3AF",
+    fontSize: 11,
+    letterSpacing: 0.8,
+    marginBottom: 14,
   },
 
-  // ── Fields ──
-  fieldWrap: {
-    gap: 6,
-  },
+  /* Fields */
+  fieldWrap: { marginBottom: 14 },
   fieldLabel: {
-    fontSize: 11,
     fontWeight: "700",
-    color: "#6E7979",
-    letterSpacing: 0.55,
-    textTransform: "uppercase",
+    fontSize: 11,
+    letterSpacing: 0.6,
+    color: "#374151",
+    marginBottom: 7,
   },
   input: {
-    height: 48,
-    borderRadius: 25,
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.10)",
+    height: 46,
+    borderWidth: 1.5,
+    borderColor: "#E5E7EB",
+    borderRadius: 10,
+    paddingHorizontal: 14,
     backgroundColor: "#FFFFFF",
-    paddingHorizontal: 16,
-    fontSize: 16,
-    fontWeight: "400",
-    color: "#191C1E",
+    fontSize: 15,
+    color: "#111827",
   },
-  inputWithIcon: {
-    position: "relative",
-  },
-  inputIcon: {
-    position: "absolute",
-    right: 16,
-    top: 0,
-    bottom: 0,
-    justifyContent: "center",
-  },
+  inputWithIcon: { position: "relative" },
+  inputIcon: { position: "absolute", right: 14, top: 15 },
 
-  // ── Gender segmented ──
-  segmented: {
-    flexDirection: "row",
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.10)",
-    borderRadius: 9999,
-    padding: 4,
-    height: 40,
-  },
+  /* Gender segmented */
+  segmented: { flexDirection: "row" },
   segmentBtn: {
-    flex: 1,
-    borderRadius: 9999,
-    alignItems: "center",
-    justifyContent: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: "#F3F4F6",
+    marginRight: 8,
   },
-  segmentBtnActive: {
-    backgroundColor: "#069594",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  segmentText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#334155",
-  },
-  segmentTextActive: {
-    color: "#FFFFFF",
-  },
+  segmentBtnActive: { backgroundColor: "#069594" },
+  segmentText: { color: "#374151", fontSize: 14, fontWeight: "500" },
+  segmentTextActive: { color: "#FFFFFF", fontWeight: "600" },
 
-  // ── Dropdown ──
+  /* Dropdown */
+  row: { flexDirection: "row" },
   dropdown: {
-    height: 48,
-    borderRadius: 25,
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.10)",
-    backgroundColor: "#FEFEFE",
-    paddingHorizontal: 16,
+    height: 46,
+    borderWidth: 1.5,
+    borderColor: "#E5E7EB",
+    borderRadius: 10,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-  },
-  dropdownText: {
-    fontSize: 16,
-    fontWeight: "500",
-    color: "#334155",
-    flex: 1,
-  },
-
-  // ── Row ──
-  row: {
-    flexDirection: "row",
-  },
-
-  // ── Tags ──
-  tagContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.10)",
-    borderRadius: 25,
+    paddingHorizontal: 14,
     backgroundColor: "#FFFFFF",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    minHeight: 48,
-    alignItems: "center",
   },
+  dropdownText: { color: "#111827", fontSize: 15 },
+
+  /* Tags */
+  tagContainer: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   tag: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(6,149,148,0.10)",
-    borderRadius: 9999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    gap: 5,
+    backgroundColor: "#E6F6F6",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
   },
-  tagText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#069594",
-  },
+  tagText: { marginRight: 6, color: "#0F766E", fontSize: 13, fontWeight: "600" },
+  tagRemove: { padding: 2 },
+  tagRemoveText: { color: "#0F766E", fontSize: 12, fontWeight: "700" },
   addTagBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: "#F3F4F6",
   },
-  addTagText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#069594",
-  },
+  addTagText: { color: "#374151", fontSize: 13, fontWeight: "600" },
 
-  // ── Special Conditions ──
+  /* Special Health Conditions */
+  specialCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+  },
   specialTitle: {
-    fontSize: 18,
     fontWeight: "700",
-    color: "#334155",
+    fontSize: 17,
+    color: "#111827",
+    marginBottom: 6,
   },
   specialSubtitle: {
+    color: "#6B7280",
     fontSize: 13,
-    fontWeight: "400",
-    color: "#334155",
-    lineHeight: 21,
-    marginTop: -8,
+    lineHeight: 18,
+    marginBottom: 16,
   },
   toggleRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 2,
+    paddingVertical: 10,
   },
-  toggleLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#334155",
-    flex: 1,
-  },
+  toggleLabel: { fontSize: 15, fontWeight: "500", color: "#111827" },
+  divider: { height: 1, backgroundColor: "#F3F4F6" },
 
-  // Trimester expansion
-  trimesterWrap: {
-    flexDirection: "row",
-    marginLeft: 0,
-    marginTop: -4,
-    marginBottom: 4,
+  /* Trimester box */
+  trimesterBox: {
+    borderLeftWidth: 3,
+    borderLeftColor: "#069594",
+    paddingLeft: 12,
+    marginBottom: 10,
+    marginTop: 4,
   },
-  trimesterBorder: {
-    width: 2,
-    backgroundColor: "#069594",
-    borderRadius: 2,
-    marginRight: 18,
-    marginLeft: 2,
-  },
-  trimesterContent: {
-    flex: 1,
-    gap: 8,
-  },
-
-  // ── Danger Zone ──
-  dangerZone: {
-    alignItems: "center",
-    paddingTop: 8,
-    gap: 14,
-  },
-  removeBtn: {
-    alignSelf: "stretch",
-    height: 52,
-    backgroundColor: "#EE2121",
-    borderRadius: 9999,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#EE2121",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  removeBtnText: {
-    fontSize: 14,
+  trimesterLabel: {
     fontWeight: "700",
-    color: "#FFFFFF",
+    fontSize: 10,
+    letterSpacing: 0.6,
+    color: "#6B7280",
+    marginBottom: 6,
   },
+  trimesterDropdown: {
+    height: 44,
+    borderWidth: 1.5,
+    borderColor: "#E5E7EB",
+    borderRadius: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    backgroundColor: "#FFFFFF",
+  },
+  trimesterText: { color: "#111827", fontSize: 14 },
+
+  /* Remove / Danger */
+  removeBtn: {
+    backgroundColor: "#EF4444",
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: "center",
+    marginBottom: 10,
+    marginTop: 12,
+  },
+  removeBtnText: { color: "#FFFFFF", fontWeight: "700", fontSize: 16 },
   dangerNote: {
-    fontSize: 11,
-    fontWeight: "400",
-    color: "#6E7979",
+    color: "#9CA3AF",
+    fontSize: 12,
     textAlign: "center",
     lineHeight: 16,
-    paddingHorizontal: 32,
+    marginBottom: 4,
+  },
+
+  /* Picker modal styles */
+  pickerBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
+  },
+  pickerSheet: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 30,
+    maxHeight: "70%",
+  },
+  pickerTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#111827",
+    textAlign: "center",
+    marginVertical: 16,
+  },
+  pickerOption: {
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+  },
+  pickerOptionSelected: {
+    backgroundColor: "#E6F6F6",
+  },
+  pickerOptionText: {
+    fontSize: 16,
+    color: "#111827",
+  },
+  pickerOptionTextSelected: {
+    color: "#069594",
+    fontWeight: "600",
+  },
+  pickerSeparator: {
+    height: 1,
+    backgroundColor: "#F3F4F6",
+  },
+  pickerCancel: {
+    paddingVertical: 16,
+    alignItems: "center",
+    marginTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
+  },
+  pickerCancelText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#EF4444",
   },
 });
