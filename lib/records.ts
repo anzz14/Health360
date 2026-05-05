@@ -1,8 +1,7 @@
 import { supabase } from "@/lib/supabase";
-import { RecordRow, RecordType } from "@/types";
 
 export type RecordInput = {
-  record_type: RecordType;
+  record_type: string;
   title: string;
   description?: string | null;
   record_date: string;
@@ -13,147 +12,78 @@ export type RecordInput = {
   tags?: string[];
 };
 
-export type FamilyRecordRow = RecordRow & {
-  owner_name: string;
-  member_type: "real" | "dummy";
-};
-
-export type MyRecordRow = RecordRow & {
-  created_by?: {
-    id: string;
-    full_name: string | null;
-    avatar_url: string | null;
-  } | null;
-  updated_by?: {
-    id: string;
-    full_name: string | null;
-    avatar_url: string | null;
-  } | null;
-};
-
-// ============================================================
-// CREATE - user creates their own record
-// ============================================================
-export const createPersonalRecord = async (
-  userId: string,
+// CREATE — for any profile (self or family member)
+export const createRecord = async (
+  targetProfileId: string, // who the record belongs to
+  createdByProfileId: string, // who is creating it
   record: RecordInput,
 ) => {
   const { data, error } = await supabase
     .from("records")
     .insert({
-      owner_user_id: userId,
-      owner_member_id: null,
-      created_by_user_id: userId,
+      profile_id: targetProfileId,
+      created_by_profile_id: createdByProfileId,
+      updated_by_profile_id: createdByProfileId,
       ...record,
     })
     .select()
     .single();
 
   if (error) throw new Error(`Failed to create record: ${error.message}`);
-  return data as RecordRow;
+  return data;
 };
 
-// ============================================================
-// CREATE - admin creates record for any family member
-// (works for both real users and dummies)
-// ============================================================
-export const createMemberRecord = async (
-  adminId: string,
-  ownerMemberId: string | null,
-  ownerUserId: string | null,
-  record: RecordInput,
-) => {
+// READ — fetch all records for a profile
+export const fetchRecords = async (profileId: string) => {
   const { data, error } = await supabase
-    .from("records")
-    .insert({
-      owner_user_id: ownerUserId,
-      owner_member_id: ownerMemberId,
-      created_by_user_id: adminId,
-      updated_by_user_id: adminId,
-      ...record,
-    })
-    .select()
-    .single();
-
-  if (error) throw new Error(`Failed to create record: ${error.message}`);
-  return data as RecordRow;
-};
-
-// ============================================================
-// READ - user fetches ALL their own records
-// ============================================================
-export const fetchMyRecords = async (userId: string) => {
-  const { data: memberRow, error: memberError } = await supabase
-    .from("family_members")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("status", "active")
-    .maybeSingle();
-
-  if (memberError) {
-    console.warn(
-      "[fetchMyRecords] family_members query failed:",
-      memberError.message,
-    );
-  }
-
-  let query = supabase
     .from("records")
     .select(
       `
       *,
-      created_by:created_by_user_id ( id, full_name, avatar_url ),
-      updated_by:updated_by_user_id ( id, full_name, avatar_url )
+      created_by:created_by_profile_id ( id, full_name, avatar_url ),
+      updated_by:updated_by_profile_id ( id, full_name, avatar_url )
     `,
     )
+    .eq("profile_id", profileId)
     .eq("is_deleted", false)
     .order("record_date", { ascending: false });
 
-  if (memberRow?.id) {
-    query = query.or(
-      `owner_user_id.eq.${userId},owner_member_id.eq.${memberRow.id}`,
-    );
-  } else {
-    query = query.eq("owner_user_id", userId);
-  }
-
-  const { data, error } = await query;
   if (error) throw new Error(`Failed to fetch records: ${error.message}`);
-  return (data ?? []) as MyRecordRow[];
+  return data ?? [];
 };
 
-// ============================================================
-// READ - admin fetches ALL records in their family
-// ============================================================
+// READ — admin fetches ALL records across their family
 export const fetchFamilyRecords = async (familyId: string) => {
-  const { data: members, error: membersError } = await supabase
-    .from("family_members")
-    .select("id, user_id, full_name, status")
+  // Get all active members
+  const { data: memberships, error: membershipError } = await supabase
+    .from("family_memberships")
+    .select(
+      `
+      profile_id,
+      relation,
+      profiles ( id, full_name, avatar_url, auth_user_id )
+    `,
+    )
     .eq("family_id", familyId)
     .eq("status", "active");
 
-  if (membersError) {
-    throw new Error(`Failed to fetch members: ${membersError.message}`);
+  if (membershipError) {
+    throw new Error(`Failed to fetch members: ${membershipError.message}`);
   }
-  if (!members?.length) return [] as FamilyRecordRow[];
+  if (!memberships?.length) return [];
 
-  const memberIds = members.map((m) => m.id);
-  const userIds = members.filter((m) => m.user_id).map((m) => m.user_id!);
-
-  const filters: string[] = [];
-  if (memberIds.length) {
-    filters.push(`owner_member_id.in.(${memberIds.join(",")})`);
-  }
-  if (userIds.length) {
-    filters.push(`owner_user_id.in.(${userIds.join(",")})`);
-  }
-
-  if (!filters.length) return [] as FamilyRecordRow[];
+  const profileIds = memberships.map((m) => m.profile_id);
 
   const { data: records, error: recordsError } = await supabase
     .from("records")
-    .select("*")
-    .or(filters.join(","))
+    .select(
+      `
+      *,
+      created_by:created_by_profile_id ( id, full_name, avatar_url ),
+      updated_by:updated_by_profile_id ( id, full_name, avatar_url )
+    `,
+    )
+    .in("profile_id", profileIds)
     .eq("is_deleted", false)
     .order("record_date", { ascending: false });
 
@@ -161,33 +91,32 @@ export const fetchFamilyRecords = async (familyId: string) => {
     throw new Error(`Failed to fetch records: ${recordsError.message}`);
   }
 
+  // Attach owner info to each record
   return (records ?? []).map((record) => {
-    const owner = members.find(
-      (m) =>
-        m.id === record.owner_member_id || m.user_id === record.owner_user_id,
+    const membership = memberships.find(
+      (m) => m.profile_id === record.profile_id,
     );
-
+    const profile = membership?.profiles as any;
     return {
-      ...(record as RecordRow),
-      owner_name: owner?.full_name ?? "Unknown",
-      member_type: owner?.user_id ? "real" : "dummy",
-    } as FamilyRecordRow;
+      ...record,
+      owner_name: profile?.full_name ?? "Unknown",
+      owner_avatar: profile?.avatar_url ?? null,
+      is_dummy: !profile?.auth_user_id,
+    };
   });
 };
 
-// ============================================================
-// UPDATE - user or admin updates a record
-// ============================================================
+// UPDATE
 export const updateRecord = async (
   recordId: string,
-  updatedById: string,
-  changes: Partial<RecordRow>,
+  updatedByProfileId: string,
+  changes: Partial<RecordInput>,
 ) => {
   const { data, error } = await supabase
     .from("records")
     .update({
       ...changes,
-      updated_by_user_id: updatedById,
+      updated_by_profile_id: updatedByProfileId,
     })
     .eq("id", recordId)
     .eq("is_deleted", false)
@@ -195,67 +124,21 @@ export const updateRecord = async (
     .single();
 
   if (error) throw new Error(`Failed to update record: ${error.message}`);
-  return data as RecordRow;
+  return data;
 };
 
-// ============================================================
-// DELETE (soft) - user or admin soft deletes a record
-// ============================================================
-export const deleteRecord = async (recordId: string, deletedById: string) => {
+// DELETE (soft)
+export const deleteRecord = async (
+  recordId: string,
+  deletedByProfileId: string,
+) => {
   const { error } = await supabase
     .from("records")
     .update({
       is_deleted: true,
-      updated_by_user_id: deletedById,
+      updated_by_profile_id: deletedByProfileId,
     })
     .eq("id", recordId);
 
   if (error) throw new Error(`Failed to delete record: ${error.message}`);
-};
-
-// ============================================================
-// REMOVE DUMMY - admin removes dummy member
-// ============================================================
-export const removeDummyMember = async (memberId: string, _adminId: string) => {
-  const { error: recordsError } = await supabase
-    .from("records")
-    .delete()
-    .eq("owner_member_id", memberId);
-
-  if (recordsError) {
-    throw new Error(`Failed to delete member records: ${recordsError.message}`);
-  }
-
-  const { error: memberError } = await supabase
-    .from("family_members")
-    .update({ status: "removed" })
-    .eq("id", memberId);
-
-  if (memberError)
-    throw new Error(`Failed to remove member: ${memberError.message}`);
-};
-
-// ============================================================
-// LEAVE FAMILY - real user leaves
-// ============================================================
-export const leaveFamily = async (userId: string, familyId: string) => {
-  const { error } = await supabase
-    .from("family_members")
-    .update({ status: "removed" })
-    .eq("user_id", userId)
-    .eq("family_id", familyId);
-
-  if (error) throw new Error(`Failed to leave family: ${error.message}`);
-};
-
-// ============================================================
-// CHANGE ADMIN - update family admin
-// ============================================================
-export const changeAdmin = async (familyId: string, newAdminId: string) => {
-  const { error } = await supabase
-    .from("families")
-    .update({ admin_user_id: newAdminId })
-    .eq("id", familyId);
-
-  if (error) throw new Error(`Failed to change admin: ${error.message}`);
 };
