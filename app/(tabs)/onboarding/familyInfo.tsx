@@ -1,8 +1,9 @@
+// app/(tabs)/onboarding/familyInfo.tsx
 import { Typography } from "@/components/typography/typography";
 import { useAuth } from "@/context/auth-context";
 import { useFamilySetup } from "@/hooks/use-family-setup";
 import * as ImagePicker from "expo-image-picker";
-import { Link, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import {
   ArrowLeft,
   ArrowRight,
@@ -10,7 +11,7 @@ import {
   GitFork,
   ShieldCheck,
 } from "lucide-react-native";
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import {
   Alert,
   Image,
@@ -29,20 +30,6 @@ const FAMILY_ILLUSTRATION =
   "https://res.cloudinary.com/dt5qoqw6u/image/upload/v1776014783/a5c4cd72-2dc1-4105-90eb-4e2759a83471_pccwuo.png";
 
 export default function FamilySetupScreen() {
-useEffect(() => {
-  const fetchUser = async () => {
-    const { data, error } = await supabase
-      .from("join_requests")
-      .insert({
-        family_id: "a5daa450-...",
-        user_id: "9622e623-...",
-        status: "pending",
-        mapped_member_id: "36e2f278-...",  
-        requester_name: "Anas"
-      })
-  };
-  fetchUser();
-}, []);
   const router = useRouter();
   const { user } = useAuth();
   const { createFamily, saving } = useFamilySetup();
@@ -93,7 +80,7 @@ useEffect(() => {
     >
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-      {/* ── Global Header ── */}
+      {/* Header */}
       <View
         style={{
           flexDirection: "row",
@@ -105,9 +92,9 @@ useEffect(() => {
           borderBottomColor: "#F3F4F6",
         }}
       >
-        {/* Back button */}
         <TouchableOpacity
           activeOpacity={0.7}
+          onPress={() => router.back()}
           style={{
             width: 36,
             height: 36,
@@ -118,24 +105,20 @@ useEffect(() => {
           <ArrowLeft size={20} color="#069594" strokeWidth={2.5} />
         </TouchableOpacity>
 
-        {/* Centered Title */}
         <View style={{ flex: 1, alignItems: "center" }}>
           <Typography variant="h4" color="heading">
             Health360
           </Typography>
         </View>
-
-        {/* Spacer to balance the back button */}
         <View style={{ width: 36 }} />
       </View>
 
-      {/* ── Scrollable Content ── */}
       <ScrollView
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingBottom: 120 }}
       >
-        {/* ── Step Progress Dots ── */}
+        {/* Progress dots */}
         <View
           style={{
             flexDirection: "row",
@@ -145,7 +128,6 @@ useEffect(() => {
             gap: 6,
           }}
         >
-          {/* Active dot (elongated pill) */}
           <View
             style={{
               width: 32,
@@ -154,7 +136,6 @@ useEffect(() => {
               backgroundColor: "#069594",
             }}
           />
-          {/* Inactive dots */}
           <View
             style={{
               width: 8,
@@ -173,30 +154,18 @@ useEffect(() => {
           />
         </View>
 
-        {/* ── Main Content ── */}
         <View style={{ paddingHorizontal: 24, paddingTop: 28 }}>
-          {/* ── Heading & Subtitle ── */}
-          <Typography variant="h2" color="heading" className="mb-3">
+          <Typography variant="h2" color="heading" style={{ marginBottom: 12 }}>
             Name Your Family
           </Typography>
 
-          <Typography
-            variant="body"
-            color="secondary"
-            className="mb-8 leading-6"
-          >
-            Let's set up your central healthcare hub by adding your first family
-            member.
+          <Typography variant="body" color="secondary" style={{ marginBottom: 32, lineHeight: 24 }}>
+            Let's set up your central healthcare hub by adding your first family member.
           </Typography>
 
-          {/* ── Avatar Section ── */}
+          {/* Avatar */}
           <View style={{ alignItems: "center", marginBottom: 32 }}>
-            <TouchableOpacity
-              onPress={handleAvatarPick}
-              activeOpacity={0.85}
-              style={{ position: "relative" }}
-            >
-              {/* Avatar circle */}
+            <TouchableOpacity onPress={handleAvatarPick} activeOpacity={0.85} style={{ position: "relative" }}>
               <View
                 style={{
                   width: 110,
@@ -222,7 +191,6 @@ useEffect(() => {
                 />
               </View>
 
-              {/* Camera badge */}
               <View
                 style={{
                   position: "absolute",
@@ -236,45 +204,24 @@ useEffect(() => {
                   borderColor: "#FFFFFF",
                   alignItems: "center",
                   justifyContent: "center",
-                  shadowColor: "#000",
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.15,
-                  shadowRadius: 4,
-                  elevation: 4,
                 }}
               >
                 <Camera size={15} color="#FFFFFF" strokeWidth={2.2} />
               </View>
             </TouchableOpacity>
 
-            {/* Change Photo label */}
-            <TouchableOpacity
-              onPress={handleAvatarPick}
-              activeOpacity={0.7}
-              style={{ marginTop: 12 }}
-            >
-              <Typography
-                variant="label"
-                color="primary"
-                className="font-bold tracking-widest"
-                style={{ letterSpacing: 1.2 }}
-              >
+            <TouchableOpacity onPress={handleAvatarPick} activeOpacity={0.7} style={{ marginTop: 12 }}>
+              <Typography variant="label" color="primary" style={{ letterSpacing: 1.2, fontWeight: "700" }}>
                 CHANGE PHOTO
               </Typography>
             </TouchableOpacity>
           </View>
 
-          {/* ── Family Name Input ── */}
+          {/* Family Name */}
           <View style={{ marginBottom: 6 }}>
-            <Typography
-              variant="label"
-              color="heading"
-              className="font-bold mb-2"
-              style={{ letterSpacing: 0.5, textTransform: "uppercase" }}
-            >
-              Family Name
+            <Typography variant="label" color="heading" style={{ fontWeight: "700", marginBottom: 8, letterSpacing: 0.5 }}>
+              FAMILY NAME
             </Typography>
-
             <View
               style={{
                 height: 52,
@@ -292,49 +239,24 @@ useEffect(() => {
                 onChangeText={setFamilyName}
                 placeholder="Enter Family Name"
                 placeholderTextColor="#9CA3AF"
-                style={{
-                  flex: 1,
-                  fontSize: 15,
-                  color: "#374151",
-                  padding: 0,
-                  fontFamily: "Inter_400Regular",
-                }}
+                style={{ flex: 1, fontSize: 15, color: "#374151", padding: 0 }}
                 autoCapitalize="words"
               />
               <GitFork size={20} color="#9CA3AF" strokeWidth={1.8} />
             </View>
           </View>
 
-          {/* Divider */}
-          <View
-            style={{
-              height: 1,
-              backgroundColor: "#E5E7EB",
-              marginTop: 20,
-              marginBottom: 24,
-            }}
-          />
+          <View style={{ height: 1, backgroundColor: "#E5E7EB", marginTop: 20, marginBottom: 24 }} />
 
-          {/* ── Primary Member Details ── */}
-          <Typography
-            variant="subtitle"
-            color="heading"
-            className="font-bold mb-5"
-          >
+          {/* Primary Member Details */}
+          <Typography variant="subtitle" color="heading" style={{ fontWeight: "700", marginBottom: 20 }}>
             Primary Member Details
           </Typography>
 
-          {/* FULL NAME */}
           <View style={{ marginBottom: 16 }}>
-            <Typography
-              variant="label"
-              color="heading"
-              className="font-bold mb-2"
-              style={{ letterSpacing: 0.5, textTransform: "uppercase" }}
-            >
-              Full Name
+            <Typography variant="label" color="heading" style={{ fontWeight: "700", marginBottom: 8, letterSpacing: 0.5 }}>
+              FULL NAME
             </Typography>
-
             <View
               style={{
                 height: 52,
@@ -352,19 +274,13 @@ useEffect(() => {
                 onChangeText={setMemberName}
                 placeholder="Enter name"
                 placeholderTextColor="#9CA3AF"
-                style={{
-                  flex: 1,
-                  fontSize: 15,
-                  color: "#374151",
-                  padding: 0,
-                  fontFamily: "Inter_400Regular",
-                }}
+                style={{ flex: 1, fontSize: 15, color: "#374151", padding: 0 }}
                 autoCapitalize="words"
               />
             </View>
           </View>
 
-          {/* ── HIPAA Compliance Banner ── */}
+          {/* HIPAA Banner */}
           <View
             style={{
               flexDirection: "row",
@@ -376,26 +292,15 @@ useEffect(() => {
               marginBottom: 8,
             }}
           >
-            <ShieldCheck
-              size={18}
-              color="#069594"
-              strokeWidth={2}
-              style={{ marginTop: 1, flexShrink: 0 }}
-            />
-            <Typography
-              variant="body-small"
-              color="heading"
-              className="flex-1 leading-5 opacity-80"
-              style={{ flex: 1 }}
-            >
-              Your family data is encrypted and secure. Health360 follows strict
-              HIPAA compliance guidelines for personal health records.
+            <ShieldCheck size={18} color="#069594" strokeWidth={2} style={{ marginTop: 1 }} />
+            <Typography variant="body-small" color="heading" style={{ flex: 1, lineHeight: 20 }}>
+              Your family data is encrypted and secure. Health360 follows strict HIPAA compliance guidelines for personal health records.
             </Typography>
           </View>
         </View>
       </ScrollView>
 
-      {/* ── Sticky Footer CTA ── */}
+      {/* Sticky Footer */}
       <View
         style={{
           position: "absolute",
@@ -405,23 +310,9 @@ useEffect(() => {
           paddingHorizontal: 24,
           paddingBottom: Platform.OS === "ios" ? 36 : 24,
           paddingTop: 12,
+          backgroundColor: "#FFFFFF",
         }}
-        pointerEvents="box-none"
       >
-        {/* Fade gradient overlay */}
-        <View
-          style={{
-            position: "absolute",
-            top: -20,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: "#FFFFFF",
-            opacity: 0.95,
-          }}
-          pointerEvents="none"
-        />
-
         <TouchableOpacity
           onPress={handleContinue}
           disabled={saving}
@@ -442,24 +333,19 @@ useEffect(() => {
             opacity: saving ? 0.7 : 1,
           }}
         >
-          <Typography
-            variant="button"
-            color="white"
-            className="font-bold text-lg"
-          >
+          <Typography variant="button" color="white" style={{ fontWeight: "700", fontSize: 16 }}>
             {saving ? "Saving..." : "Continue"}
           </Typography>
-          {!saving && (
-            <ArrowRight size={18} color="#FFFFFF" strokeWidth={2.5} />
-          )}
+          {!saving && <ArrowRight size={18} color="#FFFFFF" strokeWidth={2.5} />}
         </TouchableOpacity>
-         <View className="items-center mt-5">
-                  <TouchableOpacity activeOpacity={0.7}>
-                    <Link href={'/(tabs)/familyCareDashboard'}>
-                    <Typography variant="body" color="secondary">Skip for now</Typography>
-                    </Link>
-                  </TouchableOpacity>
-                </View>
+
+        <View style={{ alignItems: "center", marginTop: 16 }}>
+          <TouchableOpacity activeOpacity={0.7} onPress={() => router.replace("/(tabs)/manageFamily")}>
+            <Typography variant="body" color="secondary">
+              Skip for now
+            </Typography>
+          </TouchableOpacity>
+        </View>
       </View>
     </SafeAreaView>
   );

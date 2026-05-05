@@ -247,6 +247,7 @@ export default function DashboardScreen() {
 
   const { familyId, members, loading: familyLoading } = useFamilyMembers();
 
+  // ✅ Load user's display name from the new 'profiles' table
   useEffect(() => {
     let isMounted = true;
 
@@ -257,14 +258,20 @@ export default function DashboardScreen() {
         return;
       }
 
-      const { data } = await supabase
-        .from("user_profiles")
+      // Query profiles using auth_user_id (not id)
+      const { data, error } = await supabase
+        .from("profiles")
         .select("full_name")
-        .eq("id", user.id)
+        .eq("auth_user_id", user.id)
         .maybeSingle();
 
-      const name =
-        data?.full_name?.trim() || user.email?.split("@")[0] || "there";
+      if (error) {
+        console.error("Error loading profile name:", error);
+        if (isMounted) setDisplayName("there");
+        return;
+      }
+
+      const name = data?.full_name?.trim() || user.email?.split("@")[0] || "there";
       if (isMounted) setDisplayName(name);
     };
 
@@ -351,9 +358,9 @@ export default function DashboardScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 120 }}
       >
-        {/* ════════════════════════════════════════════════════════════════════
+        {/* ──────────────────────────────────────────────────────────────────────
             A. HEADER (always shown)
-            ════════════════════════════════════════════════════════════════════ */}
+        ────────────────────────────────────────────────────────────────────── */}
         <View className="flex-row justify-between items-center px-6 mt-6">
           <View>
             <Typography variant="body-small" color="secondary">
@@ -397,18 +404,17 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        {/* ════════════════════════════════════════════════════════════════════
+        {/* ──────────────────────────────────────────────────────────────────────
             B. FAMILY MEMBERS SECTION
             - If user has a family → show horizontal scroll + "View All"
             - Else → show Create Family card (no "View All")
-            ════════════════════════════════════════════════════════════════════ */}
+        ────────────────────────────────────────────────────────────────────── */}
         <View className="mt-8">
           <View className="flex-row justify-between items-center px-6 mb-4">
             <Typography variant="h3" color="heading">
               Family Members
             </Typography>
 
-            {/* Only show "View All" if user belongs to a family */}
             {familyId && (
               <TouchableOpacity activeOpacity={0.7}>
                 <Link href={"/(tabs)/manageFamily"}>
@@ -425,7 +431,6 @@ export default function DashboardScreen() {
           </View>
 
           {familyId ? (
-            // User has a family → show horizontal member list
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -468,7 +473,6 @@ export default function DashboardScreen() {
               </View>
             </ScrollView>
           ) : (
-            // No family → show Create Family card (single card, not scrollable)
             <View style={{ paddingHorizontal: 24 }}>
               <CreateFamilyCard
                 onPress={() => router.push("/(tabs)/onboarding/familyInfo")}
@@ -477,9 +481,9 @@ export default function DashboardScreen() {
           )}
         </View>
 
-        {/* ════════════════════════════════════════════════════════════════════
+        {/* ──────────────────────────────────────────────────────────────────────
             C. QUICK ACTIONS (always shown)
-            ════════════════════════════════════════════════════════════════════ */}
+        ────────────────────────────────────────────────────────────────────── */}
         <View className="mt-8 px-6">
           <Typography variant="h3" color="heading" className="mb-4">
             Quick Actions
@@ -495,9 +499,9 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        {/* ════════════════════════════════════════════════════════════════════
+        {/* ──────────────────────────────────────────────────────────────────────
             D. UPCOMING APPOINTMENTS (always shown)
-            ════════════════════════════════════════════════════════════════════ */}
+        ────────────────────────────────────────────────────────────────────── */}
         <View className="mt-8 px-6">
           <View className="flex-row justify-between items-center mb-4">
             <Typography variant="h3" color="heading">

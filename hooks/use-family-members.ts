@@ -2,10 +2,11 @@ import { supabase } from "@/lib/supabase";
 import { useCallback, useEffect, useState } from "react";
 
 export type FamilyMember = {
-  id: string;
+  id: string;           // profile.id (for linked users) OR membership id? Better to use profile.id
+  membershipId: string; // family_memberships.id (useful for updates)
   name: string;
   relation: string;
-  userId: string | null;
+  userId: string | null; // auth_user_id (for linked users)
   age: number | string;
   bloodGroup: string;
   lastConsult: string;
@@ -15,9 +16,10 @@ export type FamilyMember = {
   bloodBg: string;
 };
 
-const calculateAge = (dobString?: string): number | string => {
+const calculateAge = (dobString?: string | null): number | string => {
   if (!dobString) return "--";
   const dob = new Date(dobString);
+  if (isNaN(dob.getTime())) return "--";
   const diff_ms = Date.now() - dob.getTime();
   const age_dt = new Date(diff_ms);
   return Math.abs(age_dt.getUTCFullYear() - 1970);
@@ -35,43 +37,37 @@ export function useFamilyMembers() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. Current user
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
+      // 1. Get current authenticated user
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
       if (userError || !user) {
         setHasFamily(false);
         return;
       }
 
-      // 2. Check if admin OR regular member — parallel
-      const [adminResult, memberResult] = await Promise.all([
-        supabase
-          .from("families")
-          .select("id, name, invite_code, admin_user_id")
-          .eq("admin_user_id", user.id)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle(),
+      // 2. Find the user's profile record (using auth_user_id)
+      const { data: myProfile, error: profileError } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("auth_user_id", user.id)
+        .maybeSingle();
 
-        supabase
-          .from("family_members")
-          .select("family_id")
-          .eq("user_id", user.id)
-          .limit(1)
-          .maybeSingle(),
-      ]);
-
-      // 3. Resolve family
-      let resolvedFamilyId: string | null = null;
-      if (adminResult.data?.id) {
-        resolvedFamilyId = adminResult.data.id;
-      } else if (memberResult.data?.family_id) {
-        resolvedFamilyId = memberResult.data.family_id;
+      if (profileError || !myProfile) {
+        // No profile yet – user hasn't completed onboarding
+        setHasFamily(false);
+        setLoading(false);
+        return;
       }
 
-      if (!resolvedFamilyId) {
+      // 3. Find which family the user belongs to (active membership)
+      const { data: membership, error: membershipError } = await supabase
+        .from("family_memberships")
+        .select("family_id, relation")
+        .eq("profile_id", myProfile.id)
+        .eq("status", "active")
+        .maybeSingle();
+
+      if (membershipError || !membership) {
+        // User is not a member of any family
         setHasFamily(false);
         setFamilyId("");
         setInviteCode("");
@@ -81,135 +77,76 @@ export function useFamilyMembers() {
         return;
       }
 
-      // 4. Fetch family + all its members
-      const { data, error } = await supabase
+      const currentFamilyId = membership.family_id;
+
+      // 4. Fetch family details (name, invite code, admin profile id)
+      const { data: family, error: familyError } = await supabase
         .from("families")
-        .select(
-          `
-          id,
-          name,
-          invite_code,
-          admin_user_id,
-          family_members (
-            id,
-            full_name,
-            relation,
-            dob,
-            blood_group,
-            avatar_url,
-            created_at,
-            user_id
-          )
-        `,
-        )
-        .eq("id", resolvedFamilyId)
+        .select("name, invite_code, admin_profile_id")
+        .eq("id", currentFamilyId)
         .maybeSingle();
 
-      if (error || !data) {
-        console.error("[useFamilyMembers] fetch error:", error);
-        setHasFamily(false);
-        return;
+      if (familyError || !family) {
+        throw new Error("Family not found");
       }
 
-      const rawMembers: any[] = data.family_members || [];
+      // 5. Fetch all active members of this family (join family_memberships + profiles)
+      const { data: memberships, error: membersError } = await supabase
+        .from("family_memberships")
+        .select(`
+          id,
+          relation,
+          profiles!inner (
+            id,
+            auth_user_id,
+            full_name,
+            avatar_url,
+            dob,
+            blood_group
+          )
+        `)
+        .eq("family_id", currentFamilyId)
+        .eq("status", "active");
 
-      // 5. For members with a linked user_id, fetch their live user_profile.
-      //    Profile data always wins — this ensures name/avatar/dob changes in
-      //    the user's own profile are reflected for ALL viewers of the family list.
-      const linkedUserIds = rawMembers
-        .filter((m) => !!m.user_id)
-        .map((m) => m.user_id as string);
+      if (membersError) throw membersError;
 
-      type ProfileSnap = {
-        id: string;
-        full_name: string | null;
-        avatar_url: string | null;
-        blood_group: string | null;
-        dob: string | null;
-      };
-
-      let profileMap: Record<string, ProfileSnap> = {};
-
-      if (linkedUserIds.length > 0) {
-        const { data: profiles } = await supabase
-          .from("user_profiles")
-          .select("id, full_name, avatar_url, blood_group, dob")
-          .in("id", linkedUserIds);
-
-        for (const p of profiles ?? []) {
-          profileMap[p.id] = p as ProfileSnap;
-        }
-      }
-
-      // 6. Merge: profile always wins over family_member row.
-      //
-      // KEY FIX for Bug 2:
-      //   Previously: `const dob = profile?.dob || m.dob`
-      //   Problem: if profile.dob is null (user hasn't set it), we'd fall back to
-      //   the dummy DOB from the family_member row — showing the wrong age.
-      //
-      //   But wait — after the handleAccept fix (Bug 1), the family_member row's
-      //   dob IS now correctly overwritten with the real profile value (even null).
-      //   So `m.dob` is already correct after accept.
-      //
-      //   To be extra safe, we explicitly prefer profile data when available,
-      //   and only fall back to the row when there's no linked profile at all.
-      //   This means:
-      //     - Linked member with filled profile → profile data (fresh, always correct)
-      //     - Linked member with empty profile  → null/-- (correct: they haven't filled it)
-      //     - Unlinked dummy member             → family_member row data (what admin typed)
-
-      setHasFamily(true);
-      setFamilyId(data.id);
-      setInviteCode(data.invite_code);
-      setFamilyName(data.name);
-      setIsAdmin(data.admin_user_id === user.id);
-
-      const formatted: FamilyMember[] = rawMembers.map((m) => {
-        const profile = m.user_id ? profileMap[m.user_id] : null;
-
-        // When a profile is linked, ALWAYS use profile values (even if null).
-        // Only fall back to the family_member row for unlinked (dummy) members.
-        const hasLinkedProfile = profile !== undefined && profile !== null;
-
-        const name = hasLinkedProfile
-          ? profile.full_name?.trim() || m.full_name || "Unknown"
-          : m.full_name || "Unknown";
-
-        const blood = hasLinkedProfile
-          ? (profile.blood_group ?? m.blood_group ?? "") // profile wins; row as last resort
-          : (m.blood_group ?? "");
-
-        // FIX: For dob, when profile is linked, prefer profile.dob.
-        // If the profile's dob is null, show "--" (don't show dummy dob).
-        // For unlinked members, use the row's dob (what admin typed).
-        const dob = hasLinkedProfile
-          ? (profile.dob ?? null) // null profile.dob → "--" age (correct)
-          : (m.dob ?? null); // unlinked → use what admin entered
-
-        const avatar =
-          (hasLinkedProfile ? profile.avatar_url : null) ||
-          m.avatar_url ||
-          `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=069594&color=fff`;
+      // 6. Format members
+      const formatted: FamilyMember[] = (memberships || []).map((m: any) => {
+        const profile = m.profiles;
+        const hasAuthUser = !!profile.auth_user_id;
+        const name = profile.full_name?.trim() || "Unknown";
+        const avatar = profile.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=069594&color=fff`;
+        const bloodGroup = profile.blood_group || "N/A";
+        const hasBlood = !!profile.blood_group;
+        const age = calculateAge(profile.dob);
 
         return {
-          id: m.id,
-          userId: m.user_id ?? null,
+          id: profile.id,               // profile.id (unique)
+          membershipId: m.id,          // family_memberships.id
           name,
           relation: m.relation || "Member",
-          age: calculateAge(dob ?? undefined),
-          bloodGroup: blood || "N/A",
+          userId: profile.auth_user_id || null,
+          age,
+          bloodGroup,
           avatar,
-          bloodColor: blood ? "#DC2626" : "#6B7280",
-          bloodBg: blood ? "#FEF2F2" : "#F3F4F6",
-          lastConsult: "--",
-          records: 0,
+          bloodColor: hasBlood ? "#DC2626" : "#6B7280",
+          bloodBg: hasBlood ? "#FEF2F2" : "#F3F4F6",
+          lastConsult: "--",  // TODO: fetch from records or appointments
+          records: 0,         // TODO: fetch count
         };
       });
 
+      // Determine if current user is admin (profile.id == family.admin_profile_id)
+      const userIsAdmin = myProfile.id === family.admin_profile_id;
+
+      setHasFamily(true);
+      setFamilyId(currentFamilyId);
+      setInviteCode(family.invite_code);
+      setFamilyName(family.name);
+      setIsAdmin(userIsAdmin);
       setMembers(formatted);
     } catch (err) {
-      console.error("[useFamilyMembers] unexpected error:", err);
+      console.error("[useFamilyMembers]", err);
       setHasFamily(false);
     } finally {
       setLoading(false);

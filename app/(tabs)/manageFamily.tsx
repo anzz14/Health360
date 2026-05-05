@@ -46,11 +46,11 @@ import {
 type JoinRequest = {
   id: string;
   family_id: string;
-  user_id: string;
+  auth_user_id: string;
   requester_name: string;
   status: "pending" | "approved" | "rejected";
   created_at: string;
-  mapped_member_id?: string | null;
+  mapped_profile_id?: string | null;
 };
 
 type MemberOption = {
@@ -665,6 +665,7 @@ const JoinRequestCard = ({
   </TouchableOpacity>
 );
 
+
 // ─── Join Request Sheet ───────────────────────────────────────────────────────
 
 type SheetProps = { familyId: string; onHandled: () => void };
@@ -690,12 +691,35 @@ const JoinRequestSheet = React.forwardRef<SheetRef, SheetProps>(
         setReq(r);
         setSelId(null);
         setLoading(true);
-        const { data } = await supabase
-          .from("family_members")
-          .select("id, full_name, relation, dob, blood_group, avatar_url")
+
+        const { data, error } = await supabase
+          .from("family_memberships")
+          .select(`
+            profile_id,
+            relation,
+            profiles ( id, full_name, dob, blood_group, avatar_url )
+          `)
           .eq("family_id", familyId)
+          .eq("status", "active")
           .order("created_at", { ascending: true });
-        setOptions((data as MemberOption[]) || []);
+
+        if (error) {
+          console.error("Failed to load members:", error);
+          setLoading(false);
+          return;
+        }
+
+        // Transform to MemberOption[] ( profile_id = id, profile details spread )
+        const members: MemberOption[] = (data ?? []).map((row: any) => ({
+          id: row.profile_id,               // profile id
+          full_name: row.profiles?.full_name ?? "Unknown",
+          dob: row.profiles?.dob ?? null,
+          blood_group: row.profiles?.blood_group ?? null,
+          avatar_url: row.profiles?.avatar_url ?? null,
+          relation: row.relation,
+        }));
+
+        setOptions(members);
         setLoading(false);
         innerRef.current?.present();
       },
@@ -721,34 +745,36 @@ const JoinRequestSheet = React.forwardRef<SheetRef, SheetProps>(
     };
 
     const handleAccept = async () => {
-      if (!req) return;
-      setAccepting(true);
-      try {
-        const { data, error } = await supabase.rpc("accept_join_request", {
-          p_request_id: req.id,
-          p_member_id: selId ?? null,
-          p_family_id: req.family_id,
-          p_user_id: req.user_id,
-          p_relation: selId
-            ? (options.find((o) => o.id === selId)?.relation ?? "Member")
-            : "Member",
-        });
-        if (error) {
-          Alert.alert("Error", error.message);
-          return;
-        }
-        if (data?.error) {
-          Alert.alert("Error", data.error);
-          return;
-        }
-        dismiss();
-        onHandled();
-      } catch (err: any) {
-        Alert.alert("Error", err?.message ?? "Something went wrong.");
-      } finally {
-        setAccepting(false);
-      }
-    };
+  if (!req) return;
+  setAccepting(true);
+  try {
+    const { data, error } = await supabase.rpc("accept_join_request", {
+      p_request_id: req.id,
+      p_mapped_profile_id: selId ?? null,          // ← was p_member_id
+      p_family_id: req.family_id,
+      p_auth_user_id: req.auth_user_id,            // ← was p_user_id
+      p_requester_name: req.requester_name,        // ← entirely missing before
+      p_relation: selId
+        ? (options.find((o) => o.id === selId)?.relation ?? "Member")
+        : "Member",
+    });
+
+    if (error) {
+      Alert.alert("Error", error.message);
+      return;
+    }
+
+    // The RPC returns void now, so data should be null.
+    // Remove the old data?.error check – it no longer applies.
+
+    dismiss();
+    onHandled();
+  } catch (err: any) {
+    Alert.alert("Error", err?.message ?? "Something went wrong.");
+  } finally {
+    setAccepting(false);
+  }
+};
 
     const RadioRow = ({
       id,
@@ -1089,85 +1115,76 @@ export default function ManageFamilyScreen() {
   const { kickMember, kicking } = useKickFamilyMember();
 
   // Get current logged-in user's ID
+  const [adminProfileId, setAdminProfileId] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   useEffect(() => {
-    let mounted = true;
-    supabase.auth.getUser().then(({ data }) => {
-      if (mounted) setCurrentUserId(data.user?.id ?? null);
+  if (!familyId) return;
+  supabase
+    .from("families")
+    .select("admin_profile_id")        // ← new column name
+    .eq("id", familyId)
+    .single()
+    .then(({ data }) => {
+      setAdminProfileId(data?.admin_profile_id ?? null);
     });
-    return () => {
-      mounted = false;
-    };
-  }, []);
+}, [familyId]);
 
-  useEffect(() => {
-    if (!familyId) return;
-    supabase
-      .from("families")
-      .select("admin_user_id")
-      .eq("id", familyId)
-      .single()
-      .then(({ data }) => {
-        setAdminUserId(data?.admin_user_id ?? null);
-      });
-  }, [familyId]);
+// fetch join requests with new column names
+const fetchJoinRequests = useCallback(async (fid: string) => {
+  setRequestsLoading(true);
+  const { data, error } = await supabase
+    .from("join_requests")
+    .select(
+      "id, family_id, auth_user_id, requester_name, status, created_at, mapped_profile_id"
+    )   // ↑ use auth_user_id + mapped_profile_id
+    .eq("family_id", fid)
+    .eq("status", "pending")
+    .order("created_at", { ascending: false });
 
-  const fetchJoinRequests = useCallback(async (fid: string) => {
-    setRequestsLoading(true);
-    const { data, error } = await supabase
-      .from("join_requests")
-      .select(
-        "id, family_id, user_id, requester_name, status, created_at, mapped_member_id",
-      )
-      .eq("family_id", fid)
-      .eq("status", "pending")
-      .order("created_at", { ascending: false });
+  if (error) console.error("[fetchJoinRequests]", error);
+  setJoinRequests((data as JoinRequest[]) || []);
+  setRequestsLoading(false);
+}, []);
 
-    if (error) console.error("[fetchJoinRequests]", error);
-    setJoinRequests((data as JoinRequest[]) || []);
+useEffect(() => {
+  if (familyId && isAdmin) fetchJoinRequests(familyId);
+  else {
+    setJoinRequests([]);
     setRequestsLoading(false);
-  }, []);
+  }
+}, [familyId, isAdmin, fetchJoinRequests]);
 
-  useEffect(() => {
-    if (familyId && isAdmin) fetchJoinRequests(familyId);
-    else {
-      setJoinRequests([]);
-      setRequestsLoading(false);
-    }
-  }, [familyId, isAdmin, fetchJoinRequests]);
+const handleRequestHandled = useCallback(async () => {
+  if (familyId) await fetchJoinRequests(familyId);
+  await refetch();
+}, [familyId, fetchJoinRequests, refetch]);
 
-  const handleRequestHandled = useCallback(async () => {
-    if (familyId) await fetchJoinRequests(familyId);
-    await refetch();
-  }, [familyId, fetchJoinRequests, refetch]);
+const handleKickMember = useCallback((member: FamilyMember) => {
+  if (member.relation === "Self") return;        // member.id is profile.id
+  setPendingKickMember(member);
+}, []);
 
-  const handleKickMember = useCallback((member: FamilyMember) => {
-    if (member.relation === "Self") return;
-    setPendingKickMember(member);
-  }, []);
+const confirmKickMember = useCallback(async () => {
+  if (!pendingKickMember || !familyId) return;
+  const member = pendingKickMember;
+  setPendingKickMember(null);
+  const result = await kickMember(familyId, member.id);   // member.id = profile.id
+  if (result.success) await refetch();
+  else Alert.alert("Error", result.error ?? "Failed to remove member");
+}, [familyId, kickMember, pendingKickMember, refetch]);
 
-  const confirmKickMember = useCallback(async () => {
-    if (!pendingKickMember || !familyId) return;
-    const member = pendingKickMember;
-    setPendingKickMember(null);
-    const result = await kickMember(familyId, member.id);
-    if (result.success) await refetch();
-    else Alert.alert("Error", result.error ?? "Failed to remove member");
-  }, [familyId, kickMember, pendingKickMember, refetch]);
-
-  const handleAdminTransferred = useCallback(async () => {
-    await refetch();
-    if (familyId) {
-      const { data } = await supabase
-        .from("families")
-        .select("admin_user_id")
-        .eq("id", familyId)
-        .single();
-      setAdminUserId(data?.admin_user_id ?? null);
-    }
-  }, [familyId, refetch]);
-
+const handleAdminTransferred = useCallback(async () => {
+  await refetch();
+  if (familyId) {
+    const { data } = await supabase
+      .from("families")
+      .select("admin_profile_id")       // ← new column name
+      .eq("id", familyId)
+      .single();
+    setAdminProfileId(data?.admin_profile_id ?? null);
+  }
+}, [familyId, refetch]);
   return (
     <SafeAreaView
       style={{

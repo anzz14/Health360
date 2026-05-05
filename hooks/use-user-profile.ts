@@ -21,8 +21,8 @@ export type SaveUserProfileInput = {
   bloodGroup: BloodGroup | "";
   height: string;
   weight: string;
-  conditions?: string[]; // ← condition IDs + any custom strings
-  medicalNotes?: string; // ← free-text extra notes (separate from conditions)
+  conditions?: string[];
+  medicalNotes?: string;
   avatarUrl?: string | null;
 };
 
@@ -38,7 +38,7 @@ export type LoadedUserProfile = {
   bloodGroup: BloodGroup | "";
   height: string;
   weight: string;
-  conditions: string[]; // ← restored as array
+  conditions: string[];
   medicalNotes: string;
   avatarUrl: string | null;
 };
@@ -79,6 +79,7 @@ export const useUserProfile = () => {
   const [loading, setLoading] = useState(false);
 
   // ── Load ──────────────────────────────────────────────────────────────────
+  // New schema: profiles table, keyed by auth_user_id (not id = auth uid)
 
   const loadProfile = useCallback(async (): Promise<LoadUserProfileResult> => {
     setLoading(true);
@@ -87,6 +88,7 @@ export const useUserProfile = () => {
         data: { user },
         error: userError,
       } = await supabase.auth.getUser();
+
       if (userError || !user) {
         return {
           success: false,
@@ -94,19 +96,22 @@ export const useUserProfile = () => {
         };
       }
 
+      // NEW: query by auth_user_id, not by id
       const { data, error } = await supabase
-        .from("user_profiles")
+        .from("profiles")
         .select(
           "full_name, dob, gender, blood_group, height_cm, weight_kg, conditions, medical_notes, avatar_url",
         )
-        .eq("id", user.id)
-        .single();
+        .eq("auth_user_id", user.id)
+        .maybeSingle();
 
       if (error) {
-        // PGRST116 = no rows yet → first-time user, that's fine
-        if (error.code === "PGRST116")
-          return { success: true, data: undefined };
         return { success: false, error: error.message };
+      }
+
+      // No profile yet — first-time user
+      if (!data) {
+        return { success: true, data: undefined };
       }
 
       return {
@@ -118,7 +123,7 @@ export const useUserProfile = () => {
           bloodGroup: (data.blood_group as BloodGroup) ?? "",
           height: data.height_cm != null ? String(data.height_cm) : "",
           weight: data.weight_kg != null ? String(data.weight_kg) : "",
-          conditions: (data.conditions as string[]) ?? [], // ← direct array
+          conditions: (data.conditions as string[]) ?? [],
           medicalNotes: data.medical_notes ?? "",
           avatarUrl: data.avatar_url ?? null,
         },
@@ -134,6 +139,10 @@ export const useUserProfile = () => {
   }, []);
 
   // ── Save ──────────────────────────────────────────────────────────────────
+  // New schema: upsert into profiles using auth_user_id.
+  // family_memberships links profile.id → family.id (no direct user_id on memberships).
+  // We sync the profile row; the memberships table has no duplicated profile fields
+  // so no secondary sync is needed.
 
   const saveProfile = useCallback(
     async (input: SaveUserProfileInput): Promise<SaveUserProfileResult> => {
@@ -143,6 +152,7 @@ export const useUserProfile = () => {
           data: { user },
           error: userError,
         } = await supabase.auth.getUser();
+
         if (userError || !user) {
           return {
             success: false,
@@ -158,71 +168,57 @@ export const useUserProfile = () => {
           };
         }
 
-        // ── 1. Upsert user_profiles ──────────────────────────────────────────
+        // ── 1. Check if a profile row already exists for this auth user ───────
+        const { data: existingProfile, error: fetchError } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("auth_user_id", user.id)
+          .maybeSingle();
+
+        if (fetchError) {
+          return { success: false, error: fetchError.message };
+        }
+
         const profilePayload = {
-          id: user.id,
+          auth_user_id: user.id,
           full_name: input.fullName.trim(),
           dob: formattedDob,
-          gender: input.gender,
+          gender: input.gender || null,
           blood_group: input.bloodGroup || null,
           height_cm: toNumberOrNull(input.height),
           weight_kg: toNumberOrNull(input.weight),
-          conditions: input.conditions ?? [], // ← text[] array
+          conditions: input.conditions ?? [],
           medical_notes: input.medicalNotes?.trim() || null,
           avatar_url: input.avatarUrl ?? null,
+          updated_at: new Date().toISOString(),
         };
 
-        const { error: upsertError } = await supabase
-          .from("user_profiles")
-          .upsert(profilePayload, { onConflict: "id" });
+        if (existingProfile) {
+          // ── 2a. Update existing profile row ──────────────────────────────────
+          const { error: updateError } = await supabase
+            .from("profiles")
+            .update(profilePayload)
+            .eq("id", existingProfile.id);
 
-        if (upsertError) {
-          return { success: false, error: upsertError.message };
-        }
+          if (updateError) {
+            return { success: false, error: updateError.message };
+          }
+        } else {
+          // ── 2b. Insert new profile row ───────────────────────────────────────
+          // RLS "profiles_insert" allows insert when auth_user_id = auth.uid()
+          const { error: insertError } = await supabase
+            .from("profiles")
+            .insert(profilePayload);
 
-        // ── 2. Belt-and-suspenders sync → family_members ─────────────────────
-        // The DB trigger handles this automatically, but we do it immediately
-        // here too so the UI reflects changes without waiting for a round-trip.
-        const { data: memberships } = await supabase
-          .from("family_members")
-          .select("id")
-          .eq("user_id", user.id);
-
-        if (memberships && memberships.length > 0) {
-          const syncPayload: Record<string, unknown> = {
-            updated_at: new Date().toISOString(),
-          };
-
-          // Only overwrite with non-empty values so we never blank out
-          // fields the family admin set manually.
-          if (input.fullName.trim())
-            syncPayload.full_name = input.fullName.trim();
-          if (formattedDob) syncPayload.dob = formattedDob;
-          if (input.gender) syncPayload.gender = input.gender;
-          if (input.bloodGroup) syncPayload.blood_group = input.bloodGroup;
-          if (input.avatarUrl) syncPayload.avatar_url = input.avatarUrl;
-          if (toNumberOrNull(input.height))
-            syncPayload.height_cm = toNumberOrNull(input.height);
-          if (toNumberOrNull(input.weight))
-            syncPayload.weight_kg = toNumberOrNull(input.weight);
-          if ((input.conditions ?? []).length)
-            syncPayload.conditions = input.conditions; // ← NEW
-          if (input.medicalNotes?.trim())
-            syncPayload.medical_notes = input.medicalNotes.trim();
-
-          const { error: syncError } = await supabase
-            .from("family_members")
-            .update(syncPayload)
-            .eq("user_id", user.id);
-
-          if (syncError) {
-            // Non-fatal — profile saved successfully, sync just didn't apply
-            console.warn(
-              "[saveProfile] family_members sync warning:",
-              syncError.message,
-            );
+          if (insertError) {
+            return { success: false, error: insertError.message };
           }
         }
+
+        // ── 3. No secondary sync needed ───────────────────────────────────────
+        // In the new schema, family_memberships only stores (family_id, profile_id,
+        // relation, status). All personal data lives solely in profiles.
+        // The family list view joins profiles live, so it always shows fresh data.
 
         return { success: true };
       } catch (err: any) {

@@ -7,7 +7,7 @@ import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
-import { GestureHandlerRootView } from "react-native-gesture-handler"; // ← add this
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { supabase } from "@/lib/supabase";
 import "react-native-reanimated";
 import "./global.css";
@@ -51,17 +51,20 @@ function RootNavigator() {
 
     const checkProfile = async () => {
       try {
-        const { data } = await supabase
-          .from("user_profiles")
+        // ✅ Use the correct 'profiles' table and join via auth_user_id
+        const { data, error } = await supabase
+          .from("profiles")
           .select("full_name")
-          .eq("id", session.user.id)
+          .eq("auth_user_id", session.user.id)
           .maybeSingle();
 
         if (!cancelled) {
+          // Profile exists if we got a row with a non‑empty full_name
           setHasProfile(!!data?.full_name?.trim());
           setProfileChecked(true);
         }
-      } catch {
+      } catch (err) {
+        console.error("Profile check error:", err);
         if (!cancelled) {
           setHasProfile(false);
           setProfileChecked(true);
@@ -78,26 +81,30 @@ function RootNavigator() {
     if (session && !profileChecked) return;
 
     const inAuthGroup = segments[0] === "(auth)";
+    // ✅ Correct onboarding path segments: (tabs)/onboarding/profileDetails
     const inOnboarding = segments[0] === "(tabs)" && segments[1] === "onboarding";
-
     const wasInOnboarding =
       prevSegments.current?.[0] === "(tabs)" &&
       prevSegments.current?.[1] === "onboarding";
 
     prevSegments.current = segments;
 
+    // Not logged in → go to login
     if (!session) {
       if (!inAuthGroup) router.replace("/(auth)/login");
       return;
     }
 
+    // Logged in but no profile → go to profile details screen
     if (!hasProfile) {
       if (!inOnboarding && !wasInOnboarding) {
+        // ✅ Use the correct route name: profileDetails (not userDetail)
         router.replace("/(tabs)/onboarding/userDetail");
       }
       return;
     }
 
+    // Logged in and has profile → go to main dashboard
     if (inAuthGroup) {
       router.replace("/(tabs)/familyCareDashboard");
     }
@@ -142,7 +149,6 @@ export default function RootLayout() {
   if (!loaded) return null;
 
   return (
-    // ↓ GestureHandlerRootView must be the outermost wrapper
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AuthProvider>
         <BottomSheetModalProvider>
