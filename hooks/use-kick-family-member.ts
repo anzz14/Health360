@@ -18,15 +18,52 @@ export const useKickFamilyMember = () => {
       setKicking(true);
 
       try {
-        const { error: deleteError } = await supabase
-          .from("family_members")
-          .delete()
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("id, auth_user_id")
           .eq("id", memberId)
-          .eq("family_id", familyId);
+          .maybeSingle();
 
-        if (deleteError) {
-          console.error("[kickMember] delete error:", deleteError);
-          return { success: false, error: deleteError.message };
+        if (profileError) {
+          console.error("[kickMember] profile lookup error:", profileError);
+          return { success: false, error: profileError.message };
+        }
+
+        if (!profile) {
+          return { success: false, error: "Profile not found" };
+        }
+
+        const { data: membership, error: membershipError } = await supabase
+          .from("family_memberships")
+          .select("id, status")
+          .eq("family_id", familyId)
+          .eq("profile_id", profile.id)
+          .eq("status", "active")
+          .maybeSingle();
+
+        if (membershipError) {
+          console.error(
+            "[kickMember] membership lookup error:",
+            membershipError,
+          );
+          return { success: false, error: membershipError.message };
+        }
+
+        if (!membership) {
+          return {
+            success: false,
+            error: "Member is not active in this family",
+          };
+        }
+
+        const { error: updateError } = await supabase
+          .from("family_memberships")
+          .update({ status: "removed" })
+          .eq("id", membership.id);
+
+        if (updateError) {
+          console.error("[kickMember] update error:", updateError);
+          return { success: false, error: updateError.message };
         }
 
         return { success: true };

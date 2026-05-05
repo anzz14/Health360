@@ -379,19 +379,13 @@ const MemberCard = ({
   const isThisAdmin = !!m.userId && m.userId === adminUserId;
   const canKick = isAdmin && !isThisAdmin && m.relation !== "Self";
 
-  const canViewProfile = isAdmin || (m.userId && m.userId === currentUserId);
-
   const handlePress = () => {
-    if (canViewProfile) {
-      router.push(`/manageFamily/Memberdetailprofile?memberId=${m.id}`);
-    } else {
-      Alert.alert("Access Denied", "You can only view your own profile.");
-    }
+    router.push(`/manageFamily/Memberdetailprofile?memberId=${m.id}`);
   };
 
   return (
     <TouchableOpacity
-      activeOpacity={canViewProfile ? 0.9 : 1}
+      activeOpacity={0.9}
       onPress={handlePress}
       style={{ marginBottom: 14 }}
     >
