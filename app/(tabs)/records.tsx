@@ -10,6 +10,7 @@ import {
   RecordInput,
   updateRecord,
 } from "@/lib/records";
+import { supabase } from "@/lib/supabase";
 import { RecordRow, RecordType } from "@/types";
 import { Edit3, Plus, Trash2 } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -231,31 +232,27 @@ export default function RecordsScreen() {
     }
   };
 
-  const onDelete = (recordId: string) => {
+  const onDelete = async (recordId: string) => {
     if (!user?.id) return;
 
-    Alert.alert(
-      "Delete Record",
-      "This will move the record to deleted state.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteRecord(recordId, user.id);
-              await loadRecords();
-            } catch (error: any) {
-              Alert.alert(
-                "Records",
-                error?.message ?? "Failed to delete record",
-              );
-            }
-          },
-        },
-      ],
-    );
+    console.log("user.id:", user.id);
+    console.log("recordId:", recordId);
+
+    const { data, error } = await supabase
+      .from("records")
+      .select("id, profile_id, is_deleted")
+      .eq("id", recordId)
+      .single();
+
+    console.log("record fetch:", JSON.stringify({ data, error }));
+
+    try {
+      await deleteRecord(recordId, user.id);
+      await loadRecords();
+    } catch (error: any) {
+      console.log("Delete error:", JSON.stringify(error));
+      Alert.alert("Records", error?.message ?? "Failed to delete record");
+    }
   };
 
   return (
