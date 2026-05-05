@@ -14,9 +14,15 @@ export const useAcceptJoinRequest = () => {
 
   // ─── STEP 1: Detect scenario ──────────────────────────────
   const checkAndAccept = useCallback(
-    async (request: { id: string; mapped_profile_id: string | null; auth_user_id: string }) => {
+    async (request: {
+      id: string;
+      mapped_profile_id: string | null;
+      auth_user_id: string;
+    }) => {
       if (!request.mapped_profile_id) {
-        throw new Error("This request has no mapped profile. Use the RPC accept_join_request with null mapping.");
+        throw new Error(
+          "This request has no mapped profile. Use the RPC accept_join_request with null mapping.",
+        );
       }
       setLoading(true);
       try {
@@ -37,7 +43,8 @@ export const useAcceptJoinRequest = () => {
         ]);
 
         if (dummyError) throw new Error("Failed to fetch dummy profile");
-        if (requesterError) throw new Error("Failed to fetch requester profile");
+        if (requesterError)
+          throw new Error("Failed to fetch requester profile");
 
         // Dummy already claimed — shouldn't happen but guard it
         if (dummyProfile.auth_user_id) {
@@ -73,64 +80,45 @@ export const useAcceptJoinRequest = () => {
   // ─── STEP 2: Execute based on scenario ────────────────────
   const finalizeAccept = useCallback(
     async (
-      request: { id: string; mapped_profile_id: string | null; auth_user_id: string },
+      request: {
+        id: string;
+        mapped_profile_id: string | null;
+        auth_user_id: string;
+      },
       result: AcceptResult,
     ): Promise<void> => {
       if (!request.mapped_profile_id) {
-        throw new Error("Cannot finalize accept without a mapped profile id.");
+        throw new Error("Cannot finalize without a mapped profile id.");
       }
       setLoading(true);
       try {
         if (result.scenario === "simple_claim") {
-          // Link the existing dummy profile to the requester's auth user id
+          // Just link auth_user_id to dummy profile — no merge needed
           const { error } = await supabase
             .from("profiles")
             .update({ auth_user_id: request.auth_user_id })
             .eq("id", request.mapped_profile_id)
-            .is("auth_user_id", null);
+            .is("auth_user_id", null); // safety: only claim unclaimed profiles
 
           if (error) throw new Error(`Claim failed: ${error.message}`);
+
+          // Clean up request
+          await supabase
+            .from("join_requests")
+            .update({ status: "approved" })
+            .eq("id", request.id);
+
+          await supabase.from("join_requests").delete().eq("id", request.id);
         } else if (result.scenario === "merge_needed") {
-          // Requester already has a real profile – merge dummy into it
-          const realProfileId = result.requesterProfile.id;
-          const dummyProfileId = result.dummyProfile.id;
+          // Use RPC — needs elevated permissions to move records + delete profile
+          const { error } = await supabase.rpc("merge_profiles", {
+            p_dummy_profile_id: request.mapped_profile_id,
+            p_real_profile_id: result.requesterProfile.id,
+            p_request_id: request.id,
+          });
 
-          // Move records from dummy to real profile
-          const { error: recordsError } = await supabase
-            .from("records")
-            .update({ profile_id: realProfileId })
-            .eq("profile_id", dummyProfileId);
-
-          if (recordsError) {
-            throw new Error(`Records merge failed: ${recordsError.message}`);
-          }
-
-          // Move family memberships from dummy to real profile
-          const { error: membershipError } = await supabase
-            .from("family_memberships")
-            .update({ profile_id: realProfileId })
-            .eq("profile_id", dummyProfileId);
-
-          if (membershipError) {
-            throw new Error(`Membership merge failed: ${membershipError.message}`);
-          }
-
-          // Delete the now-empty dummy profile (only if it has no auth_user_id)
-          const { error: deleteError } = await supabase
-            .from("profiles")
-            .delete()
-            .eq("id", dummyProfileId)
-            .is("auth_user_id", null);
-
-          if (deleteError) {
-            throw new Error(`Dummy cleanup failed: ${deleteError.message}`);
-          }
+          if (error) throw new Error(`Merge failed: ${error.message}`);
         }
-        // If scenario is "already_linked", nothing to do
-
-        // Mark request as approved and delete it
-        await supabase.from("join_requests").update({ status: "approved" }).eq("id", request.id);
-        await supabase.from("join_requests").delete().eq("id", request.id);
       } catch (err) {
         console.error("[finalizeAccept]", err);
         throw err;
