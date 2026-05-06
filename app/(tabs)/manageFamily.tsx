@@ -379,19 +379,13 @@ const MemberCard = ({
   const isThisAdmin = !!m.userId && m.userId === adminUserId;
   const canKick = isAdmin && !isThisAdmin && m.relation !== "Self";
 
-  const canViewProfile = isAdmin || (m.userId && m.userId === currentUserId);
-
   const handlePress = () => {
-    if (canViewProfile) {
-      router.push(`/manageFamily/Memberdetailprofile?memberId=${m.id}`);
-    } else {
-      Alert.alert("Access Denied", "You can only view your own profile.");
-    }
+    router.push(`/manageFamily/Memberdetailprofile?memberId=${m.id}`);
   };
 
   return (
     <TouchableOpacity
-      activeOpacity={canViewProfile ? 0.9 : 1}
+      activeOpacity={0.9}
       onPress={handlePress}
       style={{ marginBottom: 14 }}
     >
@@ -749,33 +743,50 @@ const JoinRequestSheet = React.forwardRef<SheetRef, SheetProps>(
     };
 
     const handleAccept = async () => {
+      console.log("handleAccept fired", { selId, req: req?.id });
       if (!req) return;
       setAccepting(true);
       try {
         if (!selId) {
-          // ── No mapping selected → check if user already has a profile ────
-          // ✅ Check if user already has a profile (from auth trigger)
+          console.log("Calling accept_join_request with:", {
+            p_request_id: req.id,
+            p_family_id: req.family_id,
+            p_auth_user_id: req.auth_user_id,
+            p_relation: "Member",
+            p_requester_name: req.requester_name,
+          });
+
           const { data: existingProfile } = await supabase
             .from("profiles")
             .select("id")
             .eq("auth_user_id", req.auth_user_id)
             .maybeSingle();
 
-          const { error } = await supabase.rpc("accept_join_request", {
+          const { data, error } = await supabase.rpc("accept_join_request", {
             p_request_id: req.id,
             p_family_id: req.family_id,
             p_auth_user_id: req.auth_user_id,
             p_relation: "Member",
+            p_requester_name: req.requester_name,
           });
 
+          console.log("accept_join_request result:", { data, error });
           if (error) throw new Error(error.message);
         } else {
-          // ── Mapping selected → detect scenario first ────────────
-          const result = await checkAndAccept({
-            id: req.id,
-            mapped_profile_id: selId,
-            auth_user_id: req.auth_user_id,
-          });
+          console.log("Going into checkAndAccept...");
+
+          let result;
+          try {
+            result = await checkAndAccept({
+              id: req.id,
+              mapped_profile_id: selId,
+              auth_user_id: req.auth_user_id,
+            });
+            console.log("checkAndAccept result:", JSON.stringify(result));
+          } catch (e: any) {
+            console.log("checkAndAccept THREW:", e.message);
+            throw e;
+          }
 
           if (result.scenario === "already_linked") {
             Alert.alert(
@@ -786,25 +797,7 @@ const JoinRequestSheet = React.forwardRef<SheetRef, SheetProps>(
           }
 
           if (result.scenario === "merge_needed") {
-            // Show confirmation before merging — destructive operation
-            await new Promise<void>((resolve, reject) => {
-              Alert.alert(
-                "Merge Profiles",
-                `${req.requester_name} already has their own account with data.\n\nTheir existing profile will be kept and all records from the dummy profile will be moved to it.\n\nContinue?`,
-                [
-                  {
-                    text: "Cancel",
-                    style: "cancel",
-                    onPress: () => reject(new Error("cancelled")),
-                  },
-                  {
-                    text: "Merge",
-                    style: "destructive",
-                    onPress: () => resolve(),
-                  },
-                ],
-              );
-            });
+            // skip confirm dialog — go straight to merge
           }
 
           await finalizeAccept(
@@ -815,12 +808,14 @@ const JoinRequestSheet = React.forwardRef<SheetRef, SheetProps>(
             },
             result,
           );
+
+          console.log("finalizeAccept done");
         }
 
         dismiss();
         onHandled();
       } catch (err: any) {
-        if (err?.message === "cancelled") return; // user pressed Cancel on merge dialog
+        if (err?.message === "cancelled") return;
         Alert.alert("Error", err?.message ?? "Something went wrong.");
       } finally {
         setAccepting(false);
@@ -1072,6 +1067,11 @@ const JoinRequestSheet = React.forwardRef<SheetRef, SheetProps>(
                   onSelect={() => setSelId(null)}
                 />
               </View>
+              {/* Debug - remove later */}
+              <Typography variant="body-small" color="secondary">
+                accepting: {String(accepting)} | denying: {String(denying)} |
+                selId: {String(selId)}
+              </Typography>
               <View style={{ gap: 10 }}>
                 <TouchableOpacity
                   onPress={handleAccept}

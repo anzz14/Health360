@@ -1,4 +1,5 @@
 import { useAuth } from "@/context/auth-context";
+import { useFamilyMembers } from "@/hooks/use-family-members";
 import {
   createMemberRecord,
   createPersonalRecord,
@@ -9,7 +10,7 @@ import {
   RecordInput,
   updateRecord,
 } from "@/lib/records";
-import { useFamilyMembers } from "@/hooks/use-family-members";
+import { supabase } from "@/lib/supabase";
 import { RecordRow, RecordType } from "@/types";
 import { Edit3, Plus, Trash2 } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -69,9 +70,7 @@ const DEFAULT_FORM: FormState = {
 };
 
 const toLabel = (value: string) =>
-  value
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (ch) => ch.toUpperCase());
+  value.replace(/_/g, " ").replace(/\b\w/g, (ch) => ch.toUpperCase());
 
 const csvToArray = (value: string) =>
   value
@@ -81,14 +80,21 @@ const csvToArray = (value: string) =>
 
 export default function RecordsScreen() {
   const { user } = useAuth();
-  const { members, familyId, isAdmin, loading: familyLoading } = useFamilyMembers();
+  const {
+    members,
+    familyId,
+    isAdmin,
+    loading: familyLoading,
+  } = useFamilyMembers();
 
   const [records, setRecords] = useState<DisplayRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [formVisible, setFormVisible] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [editingRecord, setEditingRecord] = useState<DisplayRecord | null>(null);
+  const [editingRecord, setEditingRecord] = useState<DisplayRecord | null>(
+    null,
+  );
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
 
@@ -226,24 +232,27 @@ export default function RecordsScreen() {
     }
   };
 
-  const onDelete = (recordId: string) => {
+  const onDelete = async (recordId: string) => {
     if (!user?.id) return;
 
-    Alert.alert("Delete Record", "This will move the record to deleted state.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await deleteRecord(recordId, user.id);
-            await loadRecords();
-          } catch (error: any) {
-            Alert.alert("Records", error?.message ?? "Failed to delete record");
-          }
-        },
-      },
-    ]);
+    console.log("user.id:", user.id);
+    console.log("recordId:", recordId);
+
+    const { data, error } = await supabase
+      .from("records")
+      .select("id, profile_id, is_deleted")
+      .eq("id", recordId)
+      .single();
+
+    console.log("record fetch:", JSON.stringify({ data, error }));
+
+    try {
+      await deleteRecord(recordId, user.id);
+      await loadRecords();
+    } catch (error: any) {
+      console.log("Delete error:", JSON.stringify(error));
+      Alert.alert("Records", error?.message ?? "Failed to delete record");
+    }
   };
 
   return (
@@ -252,11 +261,17 @@ export default function RecordsScreen() {
         <View>
           <Text style={styles.title}>Medical Records</Text>
           <Text style={styles.subtitle}>
-            {isAdmin ? "Manage records for your family" : "Manage your personal records"}
+            {isAdmin
+              ? "Manage records for your family"
+              : "Manage your personal records"}
           </Text>
         </View>
 
-        <TouchableOpacity style={styles.addButton} onPress={openCreate} activeOpacity={0.85}>
+        <TouchableOpacity
+          style={styles.addButton}
+          onPress={openCreate}
+          activeOpacity={0.85}
+        >
           <Plus size={18} color="#FFFFFF" />
           <Text style={styles.addButtonText}>Add</Text>
         </TouchableOpacity>
@@ -271,11 +286,15 @@ export default function RecordsScreen() {
           data={records}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
           ListEmptyComponent={
             <View style={styles.emptyCard}>
               <Text style={styles.emptyTitle}>No records yet</Text>
-              <Text style={styles.emptyBody}>Create your first medical record to get started.</Text>
+              <Text style={styles.emptyBody}>
+                Create your first medical record to get started.
+              </Text>
             </View>
           }
           renderItem={({ item }) => (
@@ -290,11 +309,15 @@ export default function RecordsScreen() {
                 </View>
 
                 <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{toLabel(item.record_type)}</Text>
+                  <Text style={styles.badgeText}>
+                    {toLabel(item.record_type)}
+                  </Text>
                 </View>
               </View>
 
-              {item.description ? <Text style={styles.description}>{item.description}</Text> : null}
+              {item.description ? (
+                <Text style={styles.description}>{item.description}</Text>
+              ) : null}
 
               <View style={styles.cardFooter}>
                 <TouchableOpacity
@@ -312,7 +335,9 @@ export default function RecordsScreen() {
                   activeOpacity={0.8}
                 >
                   <Trash2 size={16} color="#B91C1C" />
-                  <Text style={[styles.actionText, { color: "#B91C1C" }]}>Delete</Text>
+                  <Text style={[styles.actionText, { color: "#B91C1C" }]}>
+                    Delete
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -320,11 +345,18 @@ export default function RecordsScreen() {
         />
       )}
 
-      <Modal visible={formVisible} transparent animationType="slide" onRequestClose={resetForm}>
+      <Modal
+        visible={formVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={resetForm}
+      >
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{editingRecord ? "Edit Record" : "Create Record"}</Text>
+              <Text style={styles.modalTitle}>
+                {editingRecord ? "Edit Record" : "Create Record"}
+              </Text>
               <TouchableOpacity onPress={resetForm}>
                 <Text style={styles.closeText}>Close</Text>
               </TouchableOpacity>
@@ -341,9 +373,17 @@ export default function RecordsScreen() {
                         <TouchableOpacity
                           key={option.id}
                           onPress={() => setSelectedMemberId(option.id)}
-                          style={[styles.ownerChip, selected && styles.ownerChipActive]}
+                          style={[
+                            styles.ownerChip,
+                            selected && styles.ownerChipActive,
+                          ]}
                         >
-                          <Text style={[styles.ownerChipText, selected && styles.ownerChipTextActive]}>
+                          <Text
+                            style={[
+                              styles.ownerChipText,
+                              selected && styles.ownerChipTextActive,
+                            ]}
+                          >
                             {option.name}
                           </Text>
                         </TouchableOpacity>
@@ -361,10 +401,20 @@ export default function RecordsScreen() {
                     return (
                       <TouchableOpacity
                         key={type}
-                        onPress={() => setForm((prev) => ({ ...prev, record_type: type }))}
-                        style={[styles.typeChip, active && styles.typeChipActive]}
+                        onPress={() =>
+                          setForm((prev) => ({ ...prev, record_type: type }))
+                        }
+                        style={[
+                          styles.typeChip,
+                          active && styles.typeChipActive,
+                        ]}
                       >
-                        <Text style={[styles.typeChipText, active && styles.typeChipTextActive]}>
+                        <Text
+                          style={[
+                            styles.typeChipText,
+                            active && styles.typeChipTextActive,
+                          ]}
+                        >
                           {toLabel(type)}
                         </Text>
                       </TouchableOpacity>
@@ -376,19 +426,25 @@ export default function RecordsScreen() {
               <FormInput
                 label="Title"
                 value={form.title}
-                onChangeText={(title) => setForm((prev) => ({ ...prev, title }))}
+                onChangeText={(title) =>
+                  setForm((prev) => ({ ...prev, title }))
+                }
                 placeholder="e.g. Annual blood panel"
               />
               <FormInput
                 label="Date"
                 value={form.record_date}
-                onChangeText={(record_date) => setForm((prev) => ({ ...prev, record_date }))}
+                onChangeText={(record_date) =>
+                  setForm((prev) => ({ ...prev, record_date }))
+                }
                 placeholder="YYYY-MM-DD"
               />
               <FormInput
                 label="Doctor Name"
                 value={form.doctor_name}
-                onChangeText={(doctor_name) => setForm((prev) => ({ ...prev, doctor_name }))}
+                onChangeText={(doctor_name) =>
+                  setForm((prev) => ({ ...prev, doctor_name }))
+                }
                 placeholder="Optional"
               />
               <FormInput
@@ -402,14 +458,18 @@ export default function RecordsScreen() {
               <FormInput
                 label="Description"
                 value={form.description}
-                onChangeText={(description) => setForm((prev) => ({ ...prev, description }))}
+                onChangeText={(description) =>
+                  setForm((prev) => ({ ...prev, description }))
+                }
                 placeholder="Optional"
                 multiline
               />
               <FormInput
                 label="Attachments (comma separated URLs)"
                 value={form.attachments}
-                onChangeText={(attachments) => setForm((prev) => ({ ...prev, attachments }))}
+                onChangeText={(attachments) =>
+                  setForm((prev) => ({ ...prev, attachments }))
+                }
                 placeholder="https://..."
               />
               <FormInput
@@ -421,7 +481,9 @@ export default function RecordsScreen() {
               <FormInput
                 label="Notes"
                 value={form.notes}
-                onChangeText={(notes) => setForm((prev) => ({ ...prev, notes }))}
+                onChangeText={(notes) =>
+                  setForm((prev) => ({ ...prev, notes }))
+                }
                 placeholder="Optional"
                 multiline
               />
@@ -435,7 +497,9 @@ export default function RecordsScreen() {
                 {saving ? (
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
-                  <Text style={styles.saveButtonText}>{editingRecord ? "Update Record" : "Create Record"}</Text>
+                  <Text style={styles.saveButtonText}>
+                    {editingRecord ? "Update Record" : "Create Record"}
+                  </Text>
                 )}
               </TouchableOpacity>
             </ScrollView>
