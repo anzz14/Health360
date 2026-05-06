@@ -1,16 +1,17 @@
 import { Input } from "@/components/inputs/input";
 import { Typography } from "@/components/typography/typography";
 import { useAddFamilyMember } from "@/hooks/use-add-family-member";
+import { useAvatarUpload } from "@/hooks/use-avatar-upload";
 import { BottomSheetModal, BottomSheetView } from "@gorhom/bottom-sheet";
-import * as ImagePicker from "expo-image-picker";
 import { Calendar, Camera, ChevronDown, Plus, X } from "lucide-react-native";
 import React, { useMemo, useState } from "react";
 import {
+    ActivityIndicator,
     Image,
     ScrollView,
     TextInput,
     TouchableOpacity,
-    View
+    View,
 } from "react-native";
 
 const GENDERS = ["Male", "Female", "Other"] as const;
@@ -47,6 +48,8 @@ export const AddMemberBottomSheet = React.forwardRef<
 >(({ familyId, onMemberAdded }, ref) => {
   const snapPoints = useMemo(() => ["90%"], []);
   const { addMember, adding } = useAddFamilyMember();
+  const { avatarUrl, uploading, pickAndUpload, setAvatarUrl } =
+    useAvatarUpload();
 
   // Form state
   const [fullName, setFullName] = useState("");
@@ -60,20 +63,11 @@ export const AddMemberBottomSheet = React.forwardRef<
   const [medicalNotes, setMedicalNotes] = useState("");
   const [relationship, setRelationship] =
     useState<(typeof RELATIONSHIPS)[number]>("Spouse");
-  const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [showBloodPicker, setShowBloodPicker] = useState(false);
   const [showRelationshipPicker, setShowRelationshipPicker] = useState(false);
 
   const handleAvatarPick = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== "granted") return;
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-    if (!result.canceled) setAvatarUri(result.assets[0].uri);
+    await pickAndUpload();
   };
 
   const formatDob = (text: string) => {
@@ -99,7 +93,7 @@ export const AddMemberBottomSheet = React.forwardRef<
       weight,
       medicalNotes,
       relationship,
-      avatarUri,
+      avatarUrl,
     });
 
     if (result.success) {
@@ -112,7 +106,7 @@ export const AddMemberBottomSheet = React.forwardRef<
       setWeight("");
       setMedicalNotes("");
       setRelationship("Spouse");
-      setAvatarUri(null);
+      setAvatarUrl(null);
 
       // Close bottom sheet and refresh list
       if (ref && "current" in ref && ref.current) {
@@ -199,9 +193,11 @@ export const AddMemberBottomSheet = React.forwardRef<
                   overflow: "hidden",
                 }}
               >
-                {avatarUri ? (
+                {uploading ? (
+                  <ActivityIndicator size="small" color="#069594" />
+                ) : avatarUrl ? (
                   <Image
-                    source={{ uri: avatarUri }}
+                    source={{ uri: avatarUrl }}
                     style={{ width: 80, height: 80, borderRadius: 9999 }}
                   />
                 ) : (

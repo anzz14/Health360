@@ -1,30 +1,29 @@
 // app/(tabs)/onboarding/familyInfo.tsx
 import { Typography } from "@/components/typography/typography";
 import { useAuth } from "@/context/auth-context";
+import { useAvatarUpload } from "@/hooks/use-avatar-upload";
 import { useFamilySetup } from "@/hooks/use-family-setup";
-import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import {
-  ArrowLeft,
-  ArrowRight,
-  Camera,
-  GitFork,
-  ShieldCheck,
+    ArrowLeft,
+    ArrowRight,
+    Camera,
+    GitFork,
+    ShieldCheck,
 } from "lucide-react-native";
 import React, { useState } from "react";
 import {
-  Alert,
-  Image,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Alert,
+    Image,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
-import { supabase } from "@/lib/supabase";
 
 const FAMILY_ILLUSTRATION =
   "https://res.cloudinary.com/dt5qoqw6u/image/upload/v1776014783/a5c4cd72-2dc1-4105-90eb-4e2759a83471_pccwuo.png";
@@ -33,21 +32,13 @@ export default function FamilySetupScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { createFamily, saving } = useFamilySetup();
+  const { avatarUrl, uploading, pickAndUpload } = useAvatarUpload();
 
   const [familyName, setFamilyName] = useState("");
   const [memberName, setMemberName] = useState("");
-  const [avatarUri, setAvatarUri] = useState<string | null>(null);
 
   const handleAvatarPick = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== "granted") return;
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-    if (!result.canceled) setAvatarUri(result.assets[0].uri);
+    await pickAndUpload();
   };
 
   const handleContinue = async () => {
@@ -59,7 +50,7 @@ export default function FamilySetupScreen() {
     const result = await createFamily({
       familyName,
       memberName,
-      avatarUri,
+      avatarUrl,
     });
 
     if (result.success) {
@@ -159,13 +150,22 @@ export default function FamilySetupScreen() {
             Name Your Family
           </Typography>
 
-          <Typography variant="body" color="secondary" style={{ marginBottom: 32, lineHeight: 24 }}>
-            Let's set up your central healthcare hub by adding your first family member.
+          <Typography
+            variant="body"
+            color="secondary"
+            style={{ marginBottom: 32, lineHeight: 24 }}
+          >
+            Let's set up your central healthcare hub by adding your first family
+            member.
           </Typography>
 
           {/* Avatar */}
           <View style={{ alignItems: "center", marginBottom: 32 }}>
-            <TouchableOpacity onPress={handleAvatarPick} activeOpacity={0.85} style={{ position: "relative" }}>
+            <TouchableOpacity
+              onPress={handleAvatarPick}
+              activeOpacity={0.85}
+              style={{ position: "relative" }}
+            >
               <View
                 style={{
                   width: 110,
@@ -185,7 +185,7 @@ export default function FamilySetupScreen() {
                 }}
               >
                 <Image
-                  source={{ uri: avatarUri ?? FAMILY_ILLUSTRATION }}
+                  source={{ uri: avatarUrl ?? FAMILY_ILLUSTRATION }}
                   style={{ width: 110, height: 110 }}
                   resizeMode="cover"
                 />
@@ -210,8 +210,16 @@ export default function FamilySetupScreen() {
               </View>
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={handleAvatarPick} activeOpacity={0.7} style={{ marginTop: 12 }}>
-              <Typography variant="label" color="primary" style={{ letterSpacing: 1.2, fontWeight: "700" }}>
+            <TouchableOpacity
+              onPress={handleAvatarPick}
+              activeOpacity={0.7}
+              style={{ marginTop: 12 }}
+            >
+              <Typography
+                variant="label"
+                color="primary"
+                style={{ letterSpacing: 1.2, fontWeight: "700" }}
+              >
                 CHANGE PHOTO
               </Typography>
             </TouchableOpacity>
@@ -219,7 +227,11 @@ export default function FamilySetupScreen() {
 
           {/* Family Name */}
           <View style={{ marginBottom: 6 }}>
-            <Typography variant="label" color="heading" style={{ fontWeight: "700", marginBottom: 8, letterSpacing: 0.5 }}>
+            <Typography
+              variant="label"
+              color="heading"
+              style={{ fontWeight: "700", marginBottom: 8, letterSpacing: 0.5 }}
+            >
               FAMILY NAME
             </Typography>
             <View
@@ -246,15 +258,30 @@ export default function FamilySetupScreen() {
             </View>
           </View>
 
-          <View style={{ height: 1, backgroundColor: "#E5E7EB", marginTop: 20, marginBottom: 24 }} />
+          <View
+            style={{
+              height: 1,
+              backgroundColor: "#E5E7EB",
+              marginTop: 20,
+              marginBottom: 24,
+            }}
+          />
 
           {/* Primary Member Details */}
-          <Typography variant="subtitle" color="heading" style={{ fontWeight: "700", marginBottom: 20 }}>
+          <Typography
+            variant="subtitle"
+            color="heading"
+            style={{ fontWeight: "700", marginBottom: 20 }}
+          >
             Primary Member Details
           </Typography>
 
           <View style={{ marginBottom: 16 }}>
-            <Typography variant="label" color="heading" style={{ fontWeight: "700", marginBottom: 8, letterSpacing: 0.5 }}>
+            <Typography
+              variant="label"
+              color="heading"
+              style={{ fontWeight: "700", marginBottom: 8, letterSpacing: 0.5 }}
+            >
               FULL NAME
             </Typography>
             <View
@@ -292,9 +319,19 @@ export default function FamilySetupScreen() {
               marginBottom: 8,
             }}
           >
-            <ShieldCheck size={18} color="#069594" strokeWidth={2} style={{ marginTop: 1 }} />
-            <Typography variant="body-small" color="heading" style={{ flex: 1, lineHeight: 20 }}>
-              Your family data is encrypted and secure. Health360 follows strict HIPAA compliance guidelines for personal health records.
+            <ShieldCheck
+              size={18}
+              color="#069594"
+              strokeWidth={2}
+              style={{ marginTop: 1 }}
+            />
+            <Typography
+              variant="body-small"
+              color="heading"
+              style={{ flex: 1, lineHeight: 20 }}
+            >
+              Your family data is encrypted and secure. Health360 follows strict
+              HIPAA compliance guidelines for personal health records.
             </Typography>
           </View>
         </View>
@@ -333,14 +370,23 @@ export default function FamilySetupScreen() {
             opacity: saving ? 0.7 : 1,
           }}
         >
-          <Typography variant="button" color="white" style={{ fontWeight: "700", fontSize: 16 }}>
+          <Typography
+            variant="button"
+            color="white"
+            style={{ fontWeight: "700", fontSize: 16 }}
+          >
             {saving ? "Saving..." : "Continue"}
           </Typography>
-          {!saving && <ArrowRight size={18} color="#FFFFFF" strokeWidth={2.5} />}
+          {!saving && (
+            <ArrowRight size={18} color="#FFFFFF" strokeWidth={2.5} />
+          )}
         </TouchableOpacity>
 
         <View style={{ alignItems: "center", marginTop: 16 }}>
-          <TouchableOpacity activeOpacity={0.7} onPress={() => router.replace("/(tabs)/manageFamily")}>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => router.replace("/(tabs)/manageFamily")}
+          >
             <Typography variant="body" color="secondary">
               Skip for now
             </Typography>

@@ -4,11 +4,18 @@ import { useCallback, useState } from "react";
 // ---- types (shared) ----
 export type Gender = "Male" | "Female" | "Other";
 export type BloodGroup =
-  | "A+" | "A-" | "B+" | "B-" | "AB+" | "AB-" | "O+" | "O-";
+  | "A+"
+  | "A-"
+  | "B+"
+  | "B-"
+  | "AB+"
+  | "AB-"
+  | "O+"
+  | "O-";
 
 export interface MemberFormData {
   fullName: string;
-  dob: string;                // "DD / MM / YYYY"
+  dob: string; // "DD / MM / YYYY"
   gender: Gender;
   relation: string;
   bloodGroup: BloodGroup | "";
@@ -16,6 +23,7 @@ export interface MemberFormData {
   conditions: string[];
   height: string;
   weight: string;
+  avatarUrl: string | null;
 }
 
 // ---- helpers ----
@@ -23,7 +31,7 @@ const toSqlDate = (display: string) => {
   const parts = display.split(" / ");
   if (parts.length !== 3) return null;
   const [day, month, year] = parts;
-  return `${year}-${month.padStart(2,"0")}-${day.padStart(2,"0")}`;
+  return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
 };
 
 const toDisplayDate = (sql: string | null) => {
@@ -48,6 +56,7 @@ export const useMemberProfile = (profileId: string | undefined) => {
     conditions: [],
     height: "",
     weight: "",
+    avatarUrl: null,
   });
   const [original, setOriginal] = useState<MemberFormData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -70,12 +79,13 @@ export const useMemberProfile = (profileId: string | undefined) => {
         fullName: data.full_name || "",
         dob: toDisplayDate(data.dob),
         gender: (data.gender as Gender) || "Male",
-        relation: relation,            // we’ll fetch separately
+        relation: relation, // we’ll fetch separately
         bloodGroup: (data.blood_group as BloodGroup) || "",
         allergies: data.allergies || [],
         conditions: data.conditions || [],
         height: data.height_cm != null ? String(data.height_cm) : "",
         weight: data.weight_kg != null ? String(data.weight_kg) : "",
+        avatarUrl: data.avatar_url ?? null,
       };
       setForm(parsed);
       setOriginal(parsed);
@@ -92,8 +102,10 @@ export const useMemberProfile = (profileId: string | undefined) => {
         .eq("profile_id", profileId)
         .single();
       if (mem) {
-        setForm(prev => ({ ...prev, relation: mem.relation }));
-        setOriginal(prev => prev ? { ...prev, relation: mem.relation } : prev);
+        setForm((prev) => ({ ...prev, relation: mem.relation }));
+        setOriginal((prev) =>
+          prev ? { ...prev, relation: mem.relation } : prev,
+        );
       }
     }
   }, [profileId]);
@@ -116,6 +128,7 @@ export const useMemberProfile = (profileId: string | undefined) => {
       weight_kg: toNumberOrNull(form.weight),
       conditions: form.conditions,
       allergies: form.allergies,
+      avatar_url: form.avatarUrl,
       updated_at: new Date().toISOString(),
     };
     const { error } = await supabase

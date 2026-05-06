@@ -1,31 +1,32 @@
 import { Typography } from "@/components/typography/typography";
 import { useAuth } from "@/context/auth-context";
+import { useAvatarUpload } from "@/hooks/use-avatar-upload";
 import { supabase } from "@/lib/supabase";
 import { Link, useRouter } from "expo-router";
 import {
-  ChevronRight,
-  Clock,
-  CreditCard,
-  FileText,
-  FlaskConical,
-  Home,
-  MapPin,
-  Pill,
-  Plus,
-  ShoppingCart,
-  User,
-  Video,
+    ChevronRight,
+    Clock,
+    CreditCard,
+    FileText,
+    FlaskConical,
+    Home,
+    MapPin,
+    Pill,
+    Plus,
+    ShoppingCart,
+    User,
+    Video,
 } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Image,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Image,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -52,6 +53,7 @@ type NavItem = {
 };
 
 import { useFamilyMembers } from "@/hooks/use-family-members";
+import { useUserProfile } from "@/hooks/use-user-profile";
 
 const NAV: NavItem[] = [
   {
@@ -123,13 +125,13 @@ const MemberCard = ({
         elevation: active ? 6 : 1,
       }}
     >
-      {member.isMe ? (
-        <User size={28} color={active ? "#fff" : "#94A3B8"} strokeWidth={2} />
-      ) : member.avatar ? (
+      {member.avatar ? (
         <Image
           source={{ uri: member.avatar }}
           style={{ width: 72, height: 72 }}
         />
+      ) : member.isMe ? (
+        <User size={28} color={active ? "#fff" : "#94A3B8"} strokeWidth={2} />
       ) : (
         <User size={28} color={active ? "#fff" : "#94A3B8"} strokeWidth={2} />
       )}
@@ -242,8 +244,14 @@ export default function DashboardScreen() {
   const [activeMember, setActiveMember] = useState("me");
   const [activeNav, setActiveNav] = useState("home");
   const [displayName, setDisplayName] = useState("there");
+  const [currentUserProfileId, setCurrentUserProfileId] = useState<
+    string | null
+  >(null);
   const { session } = useAuth();
   const router = useRouter();
+  const { loadProfile } = useUserProfile();
+  const { avatarUrl, uploading, error, pickAndUpload, setAvatarUrl } =
+    useAvatarUpload();
 
   const { familyId, members, loading: familyLoading } = useFamilyMembers();
 
@@ -261,7 +269,7 @@ export default function DashboardScreen() {
       // Query profiles using auth_user_id (not id)
       const { data, error } = await supabase
         .from("profiles")
-        .select("full_name")
+        .select("id, full_name, avatar_url")
         .eq("auth_user_id", user.id)
         .maybeSingle();
 
@@ -271,8 +279,11 @@ export default function DashboardScreen() {
         return;
       }
 
-      const name = data?.full_name?.trim() || user.email?.split("@")[0] || "there";
+      const name =
+        data?.full_name?.trim() || user.email?.split("@")[0] || "there";
       if (isMounted) setDisplayName(name);
+      if (isMounted) setCurrentUserProfileId(data?.id ?? null);
+      if (data?.avatar_url) setAvatarUrl(data.avatar_url);
     };
 
     loadDisplayName();
@@ -281,6 +292,39 @@ export default function DashboardScreen() {
       isMounted = false;
     };
   }, [session]);
+
+  useEffect(() => {
+    const seedAvatar = async () => {
+      const result = await loadProfile();
+      if (result.success && result.data?.avatarUrl) {
+        setAvatarUrl(result.data.avatarUrl);
+      }
+    };
+
+    seedAvatar();
+  }, [loadProfile, setAvatarUrl]);
+
+  const persistAvatarUrl = async (publicUrl: string) => {
+    const profileId = currentUserProfileId;
+    if (!profileId) return;
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({ avatar_url: publicUrl })
+      .eq("id", profileId);
+
+    if (error) {
+      console.error("[DashboardAvatar]", error);
+    }
+  };
+
+  const handleHeaderAvatarPress = async () => {
+    const result = await pickAndUpload();
+    if (!result) return;
+
+    setAvatarUrl(result.publicUrl);
+    await persistAvatarUrl(result.publicUrl);
+  };
 
   // Map hook members to the compact shape used by MemberCard
   const displayMembers: FamilyMember[] = members.map((m) => ({
@@ -371,36 +415,56 @@ export default function DashboardScreen() {
             </Typography>
           </View>
           <View style={{ position: "relative" }}>
-            <View
-              style={{
-                width: 52,
-                height: 52,
-                borderRadius: 9999,
-                overflow: "hidden",
-                borderWidth: 2.5,
-                borderColor: "rgba(6,149,148,0.2)",
-              }}
-            >
-              <Link href={"/(tabs)/profile"}>
-                <Image
-                  source={{ uri: "https://i.pravatar.cc/150?img=12" }}
-                  style={{ width: 48, height: 48 }}
-                />
-              </Link>
-            </View>
-            <View
+            <Link href={"/(tabs)/profile"} asChild>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                disabled={uploading}
+                style={{
+                  width: 52,
+                  height: 52,
+                  borderRadius: 9999,
+                  overflow: "hidden",
+                  borderWidth: 2.5,
+                  borderColor: "rgba(6,149,148,0.2)",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: "#FFFFFF",
+                }}
+              >
+                {uploading ? (
+                  <ActivityIndicator size="small" color="#069594" />
+                ) : avatarUrl ? (
+                  <Image
+                    source={{ uri: avatarUrl }}
+                    style={{ width: 52, height: 52 }}
+                  />
+                ) : (
+                  <Image
+                    source={{ uri: "https://i.pravatar.cc/150?img=12" }}
+                    style={{ width: 48, height: 48 }}
+                  />
+                )}
+              </TouchableOpacity>
+            </Link>
+            <TouchableOpacity
+              onPress={handleHeaderAvatarPress}
+              disabled={uploading}
               style={{
                 position: "absolute",
                 bottom: 1,
                 right: 1,
-                width: 13,
-                height: 13,
-                borderRadius: 9999,
+                width: 18,
+                height: 18,
+                borderRadius: 9,
                 backgroundColor: "#069594",
                 borderWidth: 2,
                 borderColor: "#F2F5F7",
+                alignItems: "center",
+                justifyContent: "center",
               }}
-            />
+            >
+              <Plus size={10} color="#FFFFFF" strokeWidth={3} />
+            </TouchableOpacity>
           </View>
         </View>
 

@@ -1,21 +1,32 @@
-import { ScrollView, View, Text, TouchableOpacity, Image } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import {
-  Menu,
-  Bell,
-  Pencil,
-  ChevronRight,
-  Clock,
-  FileText,
-  CreditCard,
-  Calendar,
-  ShoppingBag,
-  MapPin,
-  HelpCircle,
-  MessageCircle,
-  ArrowRight,
-} from "lucide-react-native";
+import { useAvatarUpload } from "@/hooks/use-avatar-upload";
+import { useUserProfile } from "@/hooks/use-user-profile";
 import { supabase } from "@/lib/supabase";
+import {
+    ArrowRight,
+    Bell,
+    Calendar,
+    ChevronRight,
+    Clock,
+    CreditCard,
+    FileText,
+    HelpCircle,
+    MapPin,
+    Menu,
+    MessageCircle,
+    Pencil,
+    ShoppingBag,
+} from "lucide-react-native";
+import { useEffect, useState } from "react";
+import {
+    ActivityIndicator,
+    Alert,
+    Image,
+    ScrollView,
+    Text,
+    TouchableOpacity,
+    View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 const TEAL = "#069594";
 
@@ -32,7 +43,6 @@ function MenuItem({
   chevronColor?: string;
   last?: boolean;
 }) {
-
   return (
     <TouchableOpacity
       className={`flex-row items-center justify-between px-4 py-4 ${
@@ -74,14 +84,68 @@ function MiniAvatar({
 }
 
 export default function ProfileScreen() {
+  const { loadProfile } = useUserProfile();
+  const { avatarUrl, uploading, error, pickAndUpload, setAvatarUrl } =
+    useAvatarUpload();
+  const [displayName, setDisplayName] = useState("Alex Sharma");
+  const [phoneNumber] = useState("+91 98765 43210");
 
-    const handleLogout = async () => {
+  useEffect(() => {
+    const loadCurrentProfile = async () => {
+      const result = await loadProfile();
+
+      if (result.success && result.data) {
+        setDisplayName(result.data.fullName || "Alex Sharma");
+        setAvatarUrl(result.data.avatarUrl);
+      }
+    };
+
+    loadCurrentProfile();
+  }, [loadProfile, setAvatarUrl]);
+
+  useEffect(() => {
+    if (error) {
+      Alert.alert("Photo Error", error);
+    }
+  }, [error]);
+
+  const persistAvatarUrl = async (publicUrl: string) => {
+    const { data, error: userError } = await supabase.auth.getUser();
+
+    if (userError || !data.user) {
+      Alert.alert("Upload Saved", "Photo uploaded, but you are not signed in.");
+      return;
+    }
+
+    const { error: updateError } = await supabase
+      .from("profiles")
+      .update({ avatar_url: publicUrl })
+      .eq("auth_user_id", data.user.id);
+
+    if (updateError) {
+      console.error("[ProfileAvatar]", updateError);
+      Alert.alert(
+        "Upload Saved",
+        "Photo uploaded, but the profile record could not be updated.",
+      );
+    }
+  };
+
+  const handlePickAvatar = async () => {
+    const result = await pickAndUpload();
+
+    if (!result) return;
+
+    setAvatarUrl(result.publicUrl);
+    await persistAvatarUrl(result.publicUrl);
+  };
+
+  const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
-    
+
     if (error) {
       console.log("Error logging out", error.message);
     }
-
   };
   return (
     <SafeAreaView className="flex-1 bg-[#F5F7FA]">
@@ -105,13 +169,37 @@ export default function ProfileScreen() {
         <View className="bg-white rounded-[25px] shadow-sm items-center px-4 pt-6 pb-5">
           {/* Avatar */}
           <View className="relative mb-3">
-            <View className="w-22 h-22 rounded-full border-4 border-white bg-teal-500 items-center justify-center shadow-sm"
-              style={{ width: 88, height: 88 }}>
-              <Text className="text-3xl font-bold text-white">AS</Text>
-            </View>
             <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={handlePickAvatar}
+              disabled={uploading}
+              className="w-22 h-22 rounded-full border-4 border-white items-center justify-center shadow-sm overflow-hidden"
+              style={{ width: 88, height: 88, backgroundColor: TEAL }}
+            >
+              {uploading ? (
+                <ActivityIndicator color="#fff" />
+              ) : avatarUrl ? (
+                <Image
+                  source={{ uri: avatarUrl }}
+                  style={{ width: 88, height: 88 }}
+                />
+              ) : (
+                <Text className="text-3xl font-bold text-white">
+                  {displayName
+                    .split(" ")
+                    .filter(Boolean)
+                    .slice(0, 2)
+                    .map((part) => part[0])
+                    .join("")
+                    .toUpperCase() || "AS"}
+                </Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handlePickAvatar}
               className="absolute bottom-0 right-0 w-8 h-8 rounded-full border-2 border-white items-center justify-center"
               style={{ backgroundColor: TEAL }}
+              disabled={uploading}
             >
               <Pencil size={12} color="#fff" strokeWidth={2} />
             </TouchableOpacity>
@@ -119,10 +207,10 @@ export default function ProfileScreen() {
 
           {/* Name & Phone */}
           <Text className="text-[22px] font-bold text-[#334155] text-center">
-            Alex Sharma
+            {displayName}
           </Text>
           <Text className="text-sm text-[#334155] mt-1 text-center">
-            +91 98765 43210
+            {phoneNumber}
           </Text>
 
           {/* Family Admin Badge */}
@@ -134,10 +222,7 @@ export default function ProfileScreen() {
               className="w-2 h-2 rounded-full"
               style={{ backgroundColor: TEAL }}
             />
-            <Text
-              className="text-xs font-bold"
-              style={{ color: TEAL }}
-            >
+            <Text className="text-xs font-bold" style={{ color: TEAL }}>
               Family Admin
             </Text>
           </View>
@@ -251,11 +336,11 @@ export default function ProfileScreen() {
 
         {/* Footer */}
         <View className="items-center pt-6 pb-4 gap-4">
-      <TouchableOpacity onPress={handleLogout}>
-        <Text className="text-base font-bold text-[#EE2222]">Log Out</Text>
-      </TouchableOpacity>
-      <Text className="text-xs text-[#6E7979]">v2.1.0</Text>
-    </View>
+          <TouchableOpacity onPress={handleLogout}>
+            <Text className="text-base font-bold text-[#EE2222]">Log Out</Text>
+          </TouchableOpacity>
+          <Text className="text-xs text-[#6E7979]">v2.1.0</Text>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );

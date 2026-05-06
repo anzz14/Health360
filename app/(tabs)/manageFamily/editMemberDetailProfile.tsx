@@ -1,33 +1,35 @@
 import { Input } from "@/components/inputs/input";
+import { useAvatarUpload } from "@/hooks/use-avatar-upload";
 import {
-  Gender,
-  MemberFormData,
-  useMemberProfile,
+    Gender,
+    MemberFormData,
+    useMemberProfile,
 } from "@/hooks/useMemberProfile";
 import { supabase } from "@/lib/supabase";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
-  ArrowLeft,
-  CalendarDays,
-  Camera,
-  ChevronDown,
-  Phone,
+    ArrowLeft,
+    CalendarDays,
+    Camera,
+    ChevronDown,
+    Phone,
 } from "lucide-react-native";
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Modal,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    Image,
+    Modal,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Switch,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 // ─── Reusable in‑page picker modal ──────────────────────────────────────────
@@ -76,7 +78,9 @@ function PickerModal({
                 </Text>
               </TouchableOpacity>
             )}
-            ItemSeparatorComponent={() => <View style={styles.pickerSeparator} />}
+            ItemSeparatorComponent={() => (
+              <View style={styles.pickerSeparator} />
+            )}
           />
           <TouchableOpacity onPress={onClose} style={styles.pickerCancel}>
             <Text style={styles.pickerCancelText}>Cancel</Text>
@@ -94,6 +98,8 @@ export default function EditFamilyMember() {
   const router = useRouter();
   const { form, setForm, load, save, loading, saving, isDirty } =
     useMemberProfile(memberId);
+  const { avatarUrl, uploading, pickAndUpload, setAvatarUrl } =
+    useAvatarUpload();
 
   // Special health condition toggles (local state, not yet persisted – you can hook them later)
   const [isPregnant, setIsPregnant] = useState(false);
@@ -108,12 +114,16 @@ export default function EditFamilyMember() {
   const [pickerTitle, setPickerTitle] = useState("");
   const [pickerOptions, setPickerOptions] = useState<string[]>([]);
   const [pickerCallback, setPickerCallback] = useState<(val: string) => void>(
-    () => {}
+    () => {},
   );
 
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    setAvatarUrl(form.avatarUrl);
+  }, [form.avatarUrl, setAvatarUrl]);
 
   // ─── Helpers ───────────────────────────────────────────────────────────
 
@@ -122,10 +132,24 @@ export default function EditFamilyMember() {
   };
 
   const removeAllergy = (item: string) =>
-    update("allergies", form.allergies.filter((a) => a !== item));
+    update(
+      "allergies",
+      form.allergies.filter((a) => a !== item),
+    );
 
   const removeCondition = (item: string) =>
-    update("conditions", form.conditions.filter((c) => c !== item));
+    update(
+      "conditions",
+      form.conditions.filter((c) => c !== item),
+    );
+
+  const handleAvatarPick = async () => {
+    const result = await pickAndUpload();
+    if (!result) return;
+
+    setAvatarUrl(result.publicUrl);
+    update("avatarUrl", result.publicUrl);
+  };
 
   const addAllergy = () => {
     Alert.prompt("Add Allergy", "Enter the allergy name", [
@@ -153,7 +177,7 @@ export default function EditFamilyMember() {
   const openPicker = (
     title: string,
     options: string[],
-    callback: (val: string) => void
+    callback: (val: string) => void,
   ) => {
     setPickerTitle(title);
     setPickerOptions(options);
@@ -163,23 +187,31 @@ export default function EditFamilyMember() {
 
   // Specific pickers
   const showRelationPicker = () => {
-    openPicker("Relation", ["Self", "Spouse", "Child", "Parent", "Sibling", "Other"], (val) =>
-      update("relation", val)
+    openPicker(
+      "Relation",
+      ["Self", "Spouse", "Child", "Parent", "Sibling", "Other"],
+      (val) => update("relation", val),
     );
   };
 
   const showBloodGroupPicker = () => {
-    openPicker("Blood Group", ["A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"], (val) =>
-      update("bloodGroup", val)
+    openPicker(
+      "Blood Group",
+      ["A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"],
+      (val) => update("bloodGroup", val),
     );
   };
 
   const showTrimesterPicker = () => {
-    openPicker("Trimester", [
-      "1st Trimester (Week 1-13)",
-      "2nd Trimester (Week 14-26)",
-      "3rd Trimester (Week 27-40)",
-    ], setTrimester);
+    openPicker(
+      "Trimester",
+      [
+        "1st Trimester (Week 1-13)",
+        "2nd Trimester (Week 14-26)",
+        "3rd Trimester (Week 27-40)",
+      ],
+      setTrimester,
+    );
   };
 
   const handleSave = async () => {
@@ -212,7 +244,7 @@ export default function EditFamilyMember() {
             router.back();
           },
         },
-      ]
+      ],
     );
   };
 
@@ -229,7 +261,11 @@ export default function EditFamilyMember() {
   if (loading) {
     return (
       <SafeAreaView style={styles.safe}>
-        <ActivityIndicator size="large" color="#069594" style={{ marginTop: 100 }} />
+        <ActivityIndicator
+          size="large"
+          color="#069594"
+          style={{ marginTop: 100 }}
+        />
       </SafeAreaView>
     );
   }
@@ -242,7 +278,10 @@ export default function EditFamilyMember() {
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.headerBtn}
+        >
           <ArrowLeft size={20} color="#334155" strokeWidth={2.2} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Edit Member</Text>
@@ -269,14 +308,34 @@ export default function EditFamilyMember() {
         {/* Avatar Section */}
         <View style={styles.avatarSection}>
           <View style={styles.avatarWrap}>
-            <View style={styles.avatarCircle}>
-              <Text style={styles.avatarInitials}>{getInitials(form.fullName)}</Text>
-            </View>
-            <View style={styles.avatarOverlay}>
+            <TouchableOpacity onPress={handleAvatarPick} activeOpacity={0.85}>
+              <View style={styles.avatarCircle}>
+                {uploading ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : avatarUrl ? (
+                  <Image
+                    source={{ uri: avatarUrl }}
+                    style={{ width: 80, height: 80, borderRadius: 40 }}
+                  />
+                ) : (
+                  <Text style={styles.avatarInitials}>
+                    {getInitials(form.fullName)}
+                  </Text>
+                )}
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleAvatarPick}
+              style={styles.avatarOverlay}
+            >
               <Camera size={14} color="#FFFFFF" strokeWidth={1.8} />
-            </View>
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity activeOpacity={0.7} style={{ marginTop: 10 }}>
+          <TouchableOpacity
+            onPress={handleAvatarPick}
+            activeOpacity={0.7}
+            style={{ marginTop: 10 }}
+          >
             <Text style={styles.changePhotoText}>Change Photo</Text>
           </TouchableOpacity>
         </View>
@@ -715,7 +774,12 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     borderRadius: 20,
   },
-  tagText: { marginRight: 6, color: "#0F766E", fontSize: 13, fontWeight: "600" },
+  tagText: {
+    marginRight: 6,
+    color: "#0F766E",
+    fontSize: 13,
+    fontWeight: "600",
+  },
   tagRemove: { padding: 2 },
   tagRemoveText: { color: "#0F766E", fontSize: 12, fontWeight: "700" },
   addTagBtn: {

@@ -10,7 +10,7 @@ type AddFamilyMemberInput = {
   weight: string;
   medicalNotes?: string;
   relationship: string;
-  avatarUri?: string | null;
+  avatarUrl?: string | null;
 };
 
 type AddFamilyMemberResult = {
@@ -31,7 +31,10 @@ export const useAddFamilyMember = () => {
   const [adding, setAdding] = useState(false);
 
   const addMember = useCallback(
-    async (familyId: string, input: AddFamilyMemberInput): Promise<AddFamilyMemberResult> => {
+    async (
+      familyId: string,
+      input: AddFamilyMemberInput,
+    ): Promise<AddFamilyMemberResult> => {
       setAdding(true);
       try {
         if (!input.fullName.trim()) {
@@ -39,9 +42,15 @@ export const useAddFamilyMember = () => {
         }
 
         // 1. Get current authenticated user
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
         if (userError || !user) {
-          return { success: false, error: userError?.message || "User not authenticated" };
+          return {
+            success: false,
+            error: userError?.message || "User not authenticated",
+          };
         }
 
         // 2. Get the admin's profile id (using auth_user_id)
@@ -52,7 +61,10 @@ export const useAddFamilyMember = () => {
           .maybeSingle();
 
         if (adminProfileError || !adminProfile) {
-          return { success: false, error: "Your profile not found. Please complete onboarding." };
+          return {
+            success: false,
+            error: "Your profile not found. Please complete onboarding.",
+          };
         }
 
         // 3. Verify admin: family's admin_profile_id must match adminProfile.id
@@ -66,7 +78,10 @@ export const useAddFamilyMember = () => {
           return { success: false, error: "Family not found" };
         }
         if (family.admin_profile_id !== adminProfile.id) {
-          return { success: false, error: "You don't have permission to add members to this family" };
+          return {
+            success: false,
+            error: "You don't have permission to add members to this family",
+          };
         }
 
         // 4. Format DOB
@@ -74,7 +89,10 @@ export const useAddFamilyMember = () => {
         if (input.dob) {
           formattedDob = toSqlDate(input.dob);
           if (!formattedDob) {
-            return { success: false, error: "Invalid date format. Use DD / MM / YYYY." };
+            return {
+              success: false,
+              error: "Invalid date format. Use DD / MM / YYYY.",
+            };
           }
         }
 
@@ -82,7 +100,7 @@ export const useAddFamilyMember = () => {
         const { data: newProfile, error: profileError } = await supabase
           .from("profiles")
           .insert({
-            auth_user_id: null,   // dummy profile, will be linked later when they accept join request
+            auth_user_id: null, // dummy profile, will be linked later when they accept join request
             full_name: input.fullName.trim(),
             dob: formattedDob,
             gender: input.gender || null,
@@ -90,7 +108,7 @@ export const useAddFamilyMember = () => {
             height_cm: input.height ? parseFloat(input.height) : null,
             weight_kg: input.weight ? parseFloat(input.weight) : null,
             medical_notes: input.medicalNotes?.trim() || null,
-            avatar_url: input.avatarUri || null,
+            avatar_url: input.avatarUrl || null,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           })
@@ -99,7 +117,10 @@ export const useAddFamilyMember = () => {
 
         if (profileError) {
           console.error("[addMember] profile insert error:", profileError);
-          return { success: false, error: "Failed to create member profile. Please try again." };
+          return {
+            success: false,
+            error: "Failed to create member profile. Please try again.",
+          };
         }
 
         // 6. Add to family_memberships (active membership)
@@ -115,9 +136,15 @@ export const useAddFamilyMember = () => {
           });
 
         if (membershipError) {
-          console.error("[addMember] membership insert error:", membershipError);
+          console.error(
+            "[addMember] membership insert error:",
+            membershipError,
+          );
           // Rollback would be ideal, but for simplicity just return error
-          return { success: false, error: "Failed to add member to family. Please try again." };
+          return {
+            success: false,
+            error: "Failed to add member to family. Please try again.",
+          };
         }
 
         return { success: true, memberId: newProfile.id };

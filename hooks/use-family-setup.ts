@@ -5,7 +5,7 @@ import { useCallback, useState } from "react";
 type CreateFamilyInput = {
   familyName: string;
   memberName: string;
-  avatarUri?: string | null;
+  avatarUrl?: string | null;
 };
 
 type CreateFamilyResult = {
@@ -31,9 +31,15 @@ export const useFamilySetup = () => {
         }
 
         // 1. Get authenticated user
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
         if (userError || !user) {
-          return { success: false, error: userError?.message || "Not authenticated" };
+          return {
+            success: false,
+            error: userError?.message || "Not authenticated",
+          };
         }
 
         // 2. Get the user's profile (must exist after ProfileDetails step)
@@ -50,21 +56,17 @@ export const useFamilySetup = () => {
           };
         }
 
-        // 3. (Optional) Upload avatar to storage – skip for brevity
-        let avatarUrl: string | null = null;
-        // TODO: implement upload if needed
-
-        // 4. Generate human‑readable invite code
+        // 3. Generate human‑readable invite code
         const inviteCode = `${input.familyName.split(" ")[0].toUpperCase()}-${generateInviteCode()}`;
 
-        // 5. Create the family – use admin_profile_id (not admin_user_id)
+        // 4. Create the family – use admin_profile_id (not admin_user_id)
         const { data: family, error: familyError } = await supabase
           .from("families")
           .insert({
             name: input.familyName.trim(),
-            admin_profile_id: profile.id,   // ✅ corrected column name
+            admin_profile_id: profile.id, // ✅ corrected column name
             invite_code: inviteCode,
-            avatar_url: avatarUrl,
+            avatar_url: input.avatarUrl ?? null,
           })
           .select()
           .single();
@@ -74,7 +76,7 @@ export const useFamilySetup = () => {
           return { success: false, error: "Failed to create family" };
         }
 
-        // 6. Add the user as an active member
+        // 5. Add the user as an active member
         const { error: membershipError } = await supabase
           .from("family_memberships")
           .insert({
@@ -89,7 +91,7 @@ export const useFamilySetup = () => {
           return { success: false, error: "Failed to add member to family" };
         }
 
-        // 7. Update profile's active_family_id
+        // 6. Update profile's active_family_id
         await supabase
           .from("profiles")
           .update({ active_family_id: family.id })
@@ -107,7 +109,7 @@ export const useFamilySetup = () => {
         setSaving(false);
       }
     },
-    []
+    [],
   );
 
   return { createFamily, saving };

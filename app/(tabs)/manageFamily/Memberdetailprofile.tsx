@@ -1,3 +1,4 @@
+import { useAvatarUpload } from "@/hooks/use-avatar-upload";
 import { useFamilyMembers } from "@/hooks/use-family-members";
 import { useKickFamilyMember } from "@/hooks/use-kick-family-member";
 import { useUserProfile } from "@/hooks/use-user-profile";
@@ -5,36 +6,36 @@ import { supabase } from "@/lib/supabase";
 import { useAppStore } from "@/store/app-store";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
-  ArrowLeft,
-  Bell,
-  CalendarDays,
-  Camera,
-  ChevronRight,
-  ClipboardList,
-  FileText,
-  FlaskConical,
-  MoreVertical,
-  Plus,
-  ShieldAlert,
-  Syringe,
-  Trash2,
+    ArrowLeft,
+    Bell,
+    CalendarDays,
+    Camera,
+    ChevronRight,
+    ClipboardList,
+    FileText,
+    FlaskConical,
+    MoreVertical,
+    Plus,
+    ShieldAlert,
+    Syringe,
+    Trash2,
 } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  Image,
-  Modal,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  View,
+    ActivityIndicator,
+    Alert,
+    Animated,
+    Image,
+    Modal,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    TouchableWithoutFeedback,
+    View,
 } from "react-native";
 
 // ─── Mock Data ────────────────────────────────────────────────────────────────
@@ -169,6 +170,8 @@ export default function MemberDetailProfile() {
     loading: membersLoading,
   } = useFamilyMembers();
   const { kickMember, kicking } = useKickFamilyMember();
+  const { avatarUrl, uploading, pickAndUpload, setAvatarUrl } =
+    useAvatarUpload();
 
   const [member, setMember] = useState<any>(null);
   const [dropdownVisible, setDropdownVisible] = useState(false);
@@ -307,6 +310,54 @@ export default function MemberDetailProfile() {
       }
     })();
   }, [memberId, storeMembers, storeProfile, familyMembers, loadProfile]);
+
+  useEffect(() => {
+    if (member?.avatar) {
+      setAvatarUrl(member.avatar);
+    }
+  }, [member?.avatar, setAvatarUrl]);
+
+  const persistAvatarUrl = async (publicUrl: string) => {
+    if (memberId) {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ avatar_url: publicUrl })
+        .eq("id", memberId);
+
+      if (error) {
+        Alert.alert("Error", error.message);
+        return;
+      }
+
+      setMember((prev: any) => (prev ? { ...prev, avatar: publicUrl } : prev));
+      return;
+    }
+
+    const { data: authData } = await supabase.auth.getUser();
+    if (!authData.user) {
+      Alert.alert("Error", "You must be logged in to update your photo.");
+      return;
+    }
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({ avatar_url: publicUrl })
+      .eq("auth_user_id", authData.user.id);
+
+    if (error) {
+      Alert.alert("Error", error.message);
+      return;
+    }
+
+    setMember((prev: any) => (prev ? { ...prev, avatar: publicUrl } : prev));
+  };
+
+  const handleAvatarPick = async () => {
+    const result = await pickAndUpload();
+    if (!result) return;
+    setAvatarUrl(result.publicUrl);
+    await persistAvatarUrl(result.publicUrl);
+  };
 
   // ─── Access control ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -525,9 +576,20 @@ export default function MemberDetailProfile() {
         contentContainerStyle={styles.scroll}
       >
         <View style={styles.heroCard}>
-          <View style={styles.avatarWrap}>
-            {member.avatar ? (
-              <Image source={{ uri: member.avatar }} style={styles.avatar} />
+          <TouchableOpacity
+            onPress={handleAvatarPick}
+            activeOpacity={0.85}
+            style={styles.avatarWrap}
+          >
+            {uploading ? (
+              <View style={[styles.avatar, styles.avatarFallback]}>
+                <ActivityIndicator size="small" color="#069594" />
+              </View>
+            ) : avatarUrl || member.avatar ? (
+              <Image
+                source={{ uri: avatarUrl || member.avatar }}
+                style={styles.avatar}
+              />
             ) : (
               <View style={[styles.avatar, styles.avatarFallback]}>
                 <Text style={styles.avatarInitials}>
@@ -538,7 +600,7 @@ export default function MemberDetailProfile() {
             <View style={styles.cameraBadge}>
               <Camera size={10} color="#FFF" strokeWidth={2} />
             </View>
-          </View>
+          </TouchableOpacity>
 
           <Text style={styles.heroName}>{member.name}</Text>
 
